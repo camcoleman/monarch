@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { MAX_LAND, leagueFor } from "@monarch/shared";
 import { KingdomMap } from "@/components/KingdomMap";
 import { WorldMap } from "@/components/WorldMap";
@@ -13,7 +13,16 @@ import { shortAddr } from "@/lib/format";
 type Tab = "trophies" | "world" | "kingdoms";
 const isTab = (x: string | null): x is Tab => x === "trophies" || x === "world" || x === "kingdoms";
 
+// useSearchParams() needs a Suspense boundary or `next build` fails to prerender this page.
 export default function LeaderboardPage() {
+  return (
+    <Suspense fallback={<p className="clash-text pt-16 text-center font-display text-2xl">Loading...</p>}>
+      <Leaderboard />
+    </Suspense>
+  );
+}
+
+function Leaderboard() {
   const { players, isLoading } = usePlayers();
   const { address } = useMe();
   const params = useSearchParams();
