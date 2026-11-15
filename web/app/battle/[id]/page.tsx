@@ -3,7 +3,7 @@
 import { Bot, Lock, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ASSETS,
   BATTLE_COLLATERAL,
@@ -259,6 +259,17 @@ function PickPanel({ battle, myAddr, now }: { battle: BattleView; myAddr: string
     }
   };
 
+  // Wallet signatures need a few seconds, so lock in whatever is selected well before the deadline.
+  const autoLockMs = practice || session.active ? 3_000 : 7_000;
+  const remaining = (battle.pickEndsAt ?? now) - now;
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (!myAddr || locked || signing || autoTried.current || !battle.pickEndsAt || remaining > autoLockMs) return;
+    autoTried.current = true;
+    lockIn();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remaining, myAddr, locked, signing, battle.pickEndsAt, autoLockMs]);
+
   return (
     <div className="panel mx-auto max-w-xl space-y-5 p-6">
       <div className="text-center">
@@ -341,7 +352,9 @@ function PickPanel({ battle, myAddr, now }: { battle: BattleView; myAddr: string
                 : "Sign in your wallet..."
               : `Lock in ${side} ${asset} ${leverage}x`}
           </button>
-          <p className="text-center text-xs text-muted">No pick by the deadline defaults to long BTC 1x.</p>
+          <p className="text-center text-sm font-bold text-down">
+            Not locked in yet. Your selection locks in automatically with {Math.round(autoLockMs / 1000)}s left.
+          </p>
         </>
       )}
       {myAddr && locked && <p className="text-center font-display text-xl text-up">Locked in! Waiting for your opponent...</p>}
@@ -578,6 +591,23 @@ function RealRewards({ battle, winner, loser }: { battle: BattleView; winner: Pl
   const { records } = useHistory(battle.txHash ? winner.address : undefined, 1);
   const loot = battle.txHash && records[0]?.loser === loser.address ? records[0].loot : null;
   const gold = goldPerWin(levels?.[1] ?? 1);
+  if (battle.settleError) {
+    const noReferee = battle.settleError.includes("REFEREE_PRIVATE_KEY");
+    return (
+      <>
+        <p className="font-bold text-down">This result wasn&apos;t recorded on-chain, so no gold, trophies or land changed hands.</p>
+        <p className="text-sm text-muted">
+          {noReferee
+            ? "The game server has no referee key (REFEREE_PRIVATE_KEY), so it can't write results to Monad."
+            : `Settlement failed: ${battle.settleError}. The referee wallet may be out of MON.`}
+        </p>
+        <Link href="/" className="btn-green text-lg">
+          Return to village
+        </Link>
+      </>
+    );
+  }
+
   return (
     <>
       <p>
@@ -607,10 +637,6 @@ function RealRewards({ battle, winner, loser }: { battle: BattleView; winner: Pl
             <span className="font-mono text-xs text-muted">{shortAddr(battle.txHash)}</span>
             <span className="font-bold text-sky underline">View tx ↗</span>
           </a>
-        ) : battle.settleError ? (
-          <span className="text-down">
-            Couldn&apos;t record this result on-chain ({battle.settleError}). The referee wallet may be out of MON.
-          </span>
         ) : (
           <span className="animate-pulse text-muted">Recording on Monad Testnet...</span>
         )}

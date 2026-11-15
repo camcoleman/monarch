@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { ROUND_SECONDS } from "@monarch/shared";
+import { PICK_SECONDS, ROUND_SECONDS } from "@monarch/shared";
 
 type Hex = `0x${string}`;
 
@@ -16,7 +16,7 @@ export const config = {
   corsOrigin: parseOrigins(env("CORS_ORIGIN") ?? "*"),
   priceMode: (env("PRICE_MODE") === "mock" ? "mock" : "live") as "live" | "mock",
   roundSeconds: Number(env("ROUND_SECONDS") ?? ROUND_SECONDS),
-  pickSeconds: Number(env("PICK_SECONDS") ?? 15),
+  pickSeconds: Number(env("PICK_SECONDS") ?? PICK_SECONDS),
   rpcUrl: env("RPC_URL") ?? "https://testnet-rpc.monad.xyz",
   contractAddress: env("CONTRACT_ADDRESS") as Hex | undefined,
   refereeKey: env("REFEREE_PRIVATE_KEY") as Hex | undefined,

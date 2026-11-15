@@ -9,7 +9,7 @@ import { PriceFeed } from "./priceFeed";
 const httpServer = createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, price: feed.latest, chain: chain.enabled, mode: config.priceMode }));
+    res.end(JSON.stringify({ ok: true, price: feed.latest, chain: chain.enabled, settle: chain.canSettle, mode: config.priceMode }));
     return;
   }
   res.writeHead(404).end();

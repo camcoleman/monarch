@@ -50,6 +50,11 @@ export class Chain {
     return Boolean(this.publicClient);
   }
 
+  /** True when battle results can be written on-chain. */
+  get canSettle() {
+    return Boolean(this.walletClient);
+  }
+
   /** Town Hall level, which decides the assets a player can trade. Max level without a contract. */
   async getTownHallLevel(player: string): Promise<number> {
     if (!this.publicClient || !this.address) return MAX_BUILDING_LEVEL;

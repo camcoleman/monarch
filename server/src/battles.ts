@@ -37,6 +37,7 @@ type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
 const BAD_SIGNATURE = "Signature didn't match this player";
 const NOT_REGISTERED = "Register your base on-chain first";
+const NO_REFEREE = "This game server can't record results on-chain (REFEREE_PRIVATE_KEY is not set), so real battles are off. Try a practice battle.";
 const ENDED_TTL_MS = 30 * 60_000;
 const FEED_ENDED_MS = 3 * 60_000;
 const LOBBY_TTL_MS = 5 * 60_000;
@@ -290,6 +291,7 @@ export class BattleManager {
     signature: string,
     timestamp: number
   ): Promise<{ player: PlayerRef } | { error: string }> {
+    if (this.chain.enabled && !this.chain.canSettle) return { error: NO_REFEREE };
     if (!isAddress(rawAddress)) return { error: "Invalid address" };
     if (!fresh(timestamp)) return { error: "Signature expired - try again" };
     const address = rawAddress.toLowerCase();

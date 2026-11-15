@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_LAYOUT, type Cell, type Layout } from "@/components/base/World";
 
 /** Building positions are cosmetic, so they live in this browser rather than on-chain. */
-const key = (address: string) => `monarch:layout:${address.toLowerCase()}`;
-/** Largest top-left cell for a 3x3 footprint on the 15x15 build grid. */
-const MAX_CELL = 12;
+const key = (address: string) => `monarch:layout:v2:${address.toLowerCase()}`;
+/** Largest top-left cell for the smallest building footprint (3x3) on the 30x30 build grid. */
+const MAX_CELL = 27;
 
 function load(address: string): Layout {
   try {

@@ -83,7 +83,7 @@ Leaving `CONTRACT_ADDRESS` empty runs the server with no chain: battles still wo
 
 - Paper trading: $10,000 virtual balance (stored in the browser), long/short up to 10x on any coin your Town Hall has unlocked (guests get BTC), liquidation at -100% of margin.
 - Matchmaking: **Attack** queues you; the next commander to hit Attack is paired with you. You can also send an open invite link, or attack a specific player from their scouted village (`/kingdom/<address>`). Unaccepted invites expire after 5 minutes.
-- Battles: both players get the same entry price, each pick a coin, long/short and leverage within 15 seconds (default long BTC 1x), then the 30-second round runs on live prices. Each player's return is measured on their own coin, so a SOL long can face a DOGE short. Highest return wins; ties go to the player who accepted.
+- Battles: both players get the same entry price, each pick a coin, long/short and leverage within 20 seconds (whatever is selected locks in automatically near the deadline; no pick at all defaults to long BTC 1x), then the 30-second round runs on live prices. Each player's return is measured on their own coin, so a SOL long can face a DOGE short. Highest return wins; ties go to the player who accepted.
 - Winner: +25 trophies (more with a Trophy Hall), +100 gold (more with a Gold Mine), 10% of the loser's gold as loot, and +1 territory plot (max 25).
 - Loser: -10 trophies and -1 territory plot (never below the starting 4).
 - Leagues by trophies: Bronze 0, Silver 100, Gold 250, Crystal 500, Titan 1000, Monarch 2000.

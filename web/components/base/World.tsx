@@ -9,12 +9,16 @@ export const VIEW_W = 1600;
 export const VIEW_H = 900;
 /** Isometric 5x5 territory grid laid over the central grass field of the ground art. */
 export const GRID = { cx: 808, cy: 428, tw: 212, th: 140, size: 5 };
-/** Each territory tile is split into 3x3 build cells, Clash style; buildings cover 3x3 cells. */
-const SUB = 3;
+/** Each territory tile is split into 6x6 build cells, so the whole field is a 30x30 Clash-style grid. */
+const SUB = 6;
 const N = GRID.size * SUB;
 const CW = GRID.tw / SUB;
 const CH = GRID.th / SUB;
-const BUILDING_SIZE = 3;
+/** Footprints in build cells, matching Clash: Town Hall 4x4, other buildings 3x3, outpost castles 2x2. */
+const FOOTPRINT: Record<string, number> = { townhall: 4, goldmine: 3, barracks: 3, trophyhall: 3, castle: 2 };
+const sizeOf = (id: number) => FOOTPRINT[BUILDINGS[id].key];
+/** The art is drawn at a steeper angle than the ground grid; flattening it lines the bases up and lowers the buildings. */
+const SQUASH = 0.88;
 
 export type Tile = { i: number; j: number };
 /** Top-left build cell of a building footprint. */
@@ -29,19 +33,29 @@ export const BUILDING_TILES: Tile[] = [
   { i: 3, j: 3 },
 ];
 
-export const DEFAULT_LAYOUT: Layout = Object.fromEntries(BUILDING_TILES.map((t, id) => [id, { ci: t.i * SUB, cj: t.j * SUB }]));
+/** Top-left cell that centers a footprint of `size` cells in a tile (rounded toward the tile's top corner). */
+const inTile = (t: Tile, size: number): Cell => {
+  const off = Math.floor((SUB - size) / 2);
+  return { ci: t.i * SUB + off, cj: t.j * SUB + off };
+};
+
+export const DEFAULT_LAYOUT: Layout = Object.fromEntries(BUILDING_TILES.map((t, id) => [id, inTile(t, sizeOf(id))]));
 
 /**
- * Sprite placement: `baseY` is the center of the sprite's stone/rock base as a fraction of image height
- * (measured from the art), `fill` is the base width as a fraction of the tile width.
+ * Sprite placement, measured from the art: `baseY` is the center of the stone/rock base as a fraction of image
+ * height, `aspect` is height / width, and `fill` is the base width as a fraction of the footprint width.
  */
-const SPRITE: Record<string, { baseY: number; fill: number }> = {
-  townhall: { baseY: 0.701, fill: 0.86 },
-  goldmine: { baseY: 0.669, fill: 0.8 },
-  barracks: { baseY: 0.698, fill: 0.78 },
-  trophyhall: { baseY: 0.748, fill: 0.72 },
-  castle: { baseY: 0.802, fill: 0.46 },
+const SPRITE: Record<string, { baseY: number; aspect: number; fill: number }> = {
+  townhall: { baseY: 0.701, aspect: 512 / 430, fill: 0.98 },
+  goldmine: { baseY: 0.669, aspect: 442 / 512, fill: 0.98 },
+  barracks: { baseY: 0.698, aspect: 512 / 444, fill: 0.96 },
+  trophyhall: { baseY: 0.748, aspect: 512 / 424, fill: 0.92 },
+  castle: { baseY: 0.802, aspect: 512 / 307, fill: 0.9 },
 };
+
+const spriteWidth = (key: string) => FOOTPRINT[key] * CW * SPRITE[key].fill;
+/** World y of the top of a sprite whose base is centered at `y`. */
+const spriteTop = (key: string, y: number) => y - spriteWidth(key) * SPRITE[key].aspect * SQUASH * SPRITE[key].baseY;
 
 export const pct = (x: number, y: number) => ({ left: `${(x / VIEW_W) * 100}%`, top: `${(y / VIEW_H) * 100}%` });
 
@@ -49,8 +63,9 @@ const spriteAt = (key: string, { x, y }: { x: number; y: number }) => {
   const s = SPRITE[key];
   return {
     ...pct(x, y),
-    width: `${((GRID.tw * s.fill) / VIEW_W) * 100}%`,
-    transform: `translate(-50%, -${s.baseY * 100}%)`,
+    width: `${(spriteWidth(key) / VIEW_W) * 100}%`,
+    transformOrigin: `50% ${s.baseY * 100}%`,
+    transform: `translate(-50%, -${s.baseY * 100}%) scaleY(${SQUASH})`,
     zIndex: Math.round(y),
   };
 };
@@ -68,7 +83,7 @@ const cellCenter = (ci: number, cj: number) => ({
   y: GRID.cy + ((ci + cj - (N - 1)) * CH) / 2,
 });
 
-const footprintCenter = ({ ci, cj }: Cell, size = BUILDING_SIZE) => cellCenter(ci + (size - 1) / 2, cj + (size - 1) / 2);
+const footprintCenter = ({ ci, cj }: Cell, size: number) => cellCenter(ci + (size - 1) / 2, cj + (size - 1) / 2);
 
 /** Grid vertex where cell lines u and v cross. */
 const vertex = (u: number, v: number) => ({ x: GRID.cx + ((u - v) * CW) / 2, y: GRID.cy + ((u + v - N) * CH) / 2 });
@@ -199,16 +214,21 @@ export function World({
   const isClaimed = (i: number, j: number) => claimed.has(`${i},${j}`);
   const nextTile = land < MAX_LAND ? TILE_ORDER[land] : null;
 
-  const positions = BUILDINGS.map((b) => (move?.id === b.id ? move.cell : layout[b.id] ?? DEFAULT_LAYOUT[b.id]));
+  const positions = BUILDINGS.map((b) => {
+    if (move?.id === b.id) return move.cell;
+    const c = layout[b.id] ?? DEFAULT_LAYOUT[b.id];
+    const max = N - sizeOf(b.id);
+    return { ci: Math.min(max, c.ci), cj: Math.min(max, c.cj) };
+  });
   // Outposts get a castle in the middle of the plot unless a building has been moved onto it.
   const castles = claimedTiles
     .slice(BUILDING_TILES.length)
-    .map((t) => ({ ci: t.i * SUB + 1, cj: t.j * SUB + 1 }))
-    .filter((c) => !BUILDINGS.some((b) => overlaps(layout[b.id] ?? DEFAULT_LAYOUT[b.id], BUILDING_SIZE, c, 1)));
+    .map((t) => inTile(t, FOOTPRINT.castle))
+    .filter((c) => !BUILDINGS.some((b) => overlaps(layout[b.id] ?? DEFAULT_LAYOUT[b.id], sizeOf(b.id), c, FOOTPRINT.castle)));
 
   const canPlace = (id: number, cell: Cell) =>
-    !BUILDINGS.some((b) => b.id !== id && overlaps(cell, BUILDING_SIZE, layout[b.id] ?? DEFAULT_LAYOUT[b.id], BUILDING_SIZE)) &&
-    !castles.some((c) => overlaps(cell, BUILDING_SIZE, c, 1));
+    !BUILDINGS.some((b) => b.id !== id && overlaps(cell, sizeOf(id), layout[b.id] ?? DEFAULT_LAYOUT[b.id], sizeOf(b.id))) &&
+    !castles.some((c) => overlaps(cell, sizeOf(id), c, FOOTPRINT.castle));
 
   /** Screen point to fractional (ci - cj, ci + cj) grid coordinates. */
   const toGrid = (clientX: number, clientY: number) => {
@@ -224,7 +244,8 @@ export function World({
     capture(e);
     const cell = positions[id];
     const p = toGrid(e.clientX, e.clientY);
-    const c = { ci: cell.ci + (BUILDING_SIZE - 1) / 2, cj: cell.cj + (BUILDING_SIZE - 1) / 2 };
+    const half = (sizeOf(id) - 1) / 2;
+    const c = { ci: cell.ci + half, cj: cell.cj + half };
     setMove({ id, pointerId: e.pointerId, x: e.clientX, y: e.clientY, grab: { a: p.a - (c.ci - c.cj), b: p.b - (c.ci + c.cj) }, cell, moved: false });
   };
 
@@ -234,10 +255,11 @@ export function World({
     const p = toGrid(e.clientX, e.clientY);
     const a = p.a - move.grab.a;
     const b = p.b - move.grab.b;
-    const half = (BUILDING_SIZE - 1) / 2;
+    const size = sizeOf(move.id);
+    const half = (size - 1) / 2;
     const cell = {
-      ci: Math.min(N - BUILDING_SIZE, Math.max(0, Math.round((a + b) / 2 - half))),
-      cj: Math.min(N - BUILDING_SIZE, Math.max(0, Math.round((b - a) / 2 - half))),
+      ci: Math.min(N - size, Math.max(0, Math.round((a + b) / 2 - half))),
+      cj: Math.min(N - size, Math.max(0, Math.round((b - a) / 2 - half))),
     };
     setMove({ ...move, cell, moved: true });
     if (selected !== move.id) onSelect(move.id);
@@ -272,12 +294,13 @@ export function World({
 
   const cells = useMemo(() => {
     const out: { ci: number; cj: number }[] = [];
-    for (let ci = 0; ci < N; ci++) for (let cj = 0; cj < N; cj++) out.push({ ci, cj });
+    for (let ci = 0; ci < N; ci += 2) for (let cj = 0; cj < N; cj += 2) out.push({ ci, cj });
     return out;
   }, []);
 
-  const goldMine = footprintCenter(positions[1]);
+  const goldMine = footprintCenter(positions[1], sizeOf(1));
   const labelFor = move?.moved ? move.id : selected;
+  const labelAt = labelFor === null ? null : footprintCenter(positions[labelFor], sizeOf(labelFor));
 
   return (
     <div
@@ -309,11 +332,11 @@ export function World({
           {/* Build grid: checkered grass, darker where the land isn't claimed yet. */}
           {cells.map(({ ci, cj }) => {
             const owned = isClaimed(Math.floor(ci / SUB), Math.floor(cj / SUB));
-            const light = (ci + cj) % 2 === 0;
+            const light = (ci + cj) % 4 === 0;
             return (
               <polygon
                 key={`c-${ci}-${cj}`}
-                points={diamond(ci, cj, 1)}
+                points={diamond(ci, cj, 2)}
                 fill={owned ? (light ? "#9dd047" : "#8fc23c") : light ? "#6f9431" : "#66892c"}
                 fillOpacity={owned ? 0.88 : 0.8}
               />
@@ -351,11 +374,12 @@ export function World({
               );
             })}
           {castles.map((c) => {
-            const { x, y } = cellCenter(c.ci, c.cj);
+            const size = FOOTPRINT.castle;
+            const { x, y } = footprintCenter(c, size);
             return (
               <g key={`cp-${c.ci}-${c.cj}`}>
-                <ellipse cx={x - 6} cy={y + 6} rx={CW * 0.75} ry={CH * 0.7} fill="#000" fillOpacity={0.35} filter="url(#soft-shadow)" />
-                <polygon points={diamond(c.ci - 0.5, c.cj - 0.5, 2, 0.1)} fill="#6b5626" fillOpacity={0.6} stroke="#3d3214" strokeOpacity={0.5} strokeWidth={2} />
+                <ellipse cx={x - 4} cy={y + 4} rx={size * CW * 0.6} ry={size * CH * 0.55} fill="#000" fillOpacity={0.35} filter="url(#soft-shadow)" />
+                <polygon points={diamond(c.ci, c.cj, size, 0.06)} fill="#6b5626" fillOpacity={0.6} stroke="#3d3214" strokeOpacity={0.5} strokeWidth={1.5} />
               </g>
             );
           })}
@@ -363,19 +387,20 @@ export function World({
           {BUILDINGS.map((b) => {
             const cell = positions[b.id];
             const moving = move?.moved && move.id === b.id;
-            const { x, y } = footprintCenter(cell);
+            const size = sizeOf(b.id);
+            const { x, y } = footprintCenter(cell, size);
             return (
               <g key={`pad-${b.id}`}>
                 {!moving && (
                   <>
-                    <ellipse cx={x - 10} cy={y + 8} rx={GRID.tw * 0.4} ry={GRID.th * 0.36} fill="#000" fillOpacity={0.38} filter="url(#soft-shadow)" />
+                    <ellipse cx={x - 6} cy={y + 5} rx={size * CW * 0.6} ry={size * CH * 0.55} fill="#000" fillOpacity={0.38} filter="url(#soft-shadow)" />
                     <polygon
-                      points={diamond(cell.ci, cell.cj, BUILDING_SIZE, 0.05)}
+                      points={diamond(cell.ci, cell.cj, size, 0.04)}
                       fill="#6b5626"
                       fillOpacity={0.62}
                       stroke={selected === b.id ? "#fff7c2" : "#3d3214"}
                       strokeOpacity={selected === b.id ? 1 : 0.5}
-                      strokeWidth={selected === b.id ? 4 : 2}
+                      strokeWidth={selected === b.id ? 3 : 1.5}
                     />
                   </>
                 )}
@@ -387,7 +412,7 @@ export function World({
         {move?.moved && (
           <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="pointer-events-none absolute inset-0 h-full w-full" style={{ zIndex: 2400 }}>
             <polygon
-              points={diamond(move.cell.ci, move.cell.cj, BUILDING_SIZE)}
+              points={diamond(move.cell.ci, move.cell.cj, sizeOf(move.id))}
               fill={moveValid ? "#5cff5c" : "#ff4d3d"}
               fillOpacity={0.5}
               stroke={moveValid ? "#c8ffc8" : "#ffd0c8"}
@@ -403,7 +428,7 @@ export function World({
             alt=""
             draggable={false}
             className="pointer-events-none absolute drop-shadow-[0_2px_1px_rgba(0,0,0,0.35)]"
-            style={spriteAt("castle", cellCenter(c.ci, c.cj))}
+            style={spriteAt("castle", footprintCenter(c, FOOTPRINT.castle))}
           />
         ))}
 
@@ -411,7 +436,7 @@ export function World({
           const level = levels[b.id] ?? 1;
           const isSelected = selected === b.id;
           const moving = move?.moved && move.id === b.id;
-          const style = spriteAt(b.key, footprintCenter(positions[b.id]));
+          const style = spriteAt(b.key, footprintCenter(positions[b.id], sizeOf(b.id)));
           return (
             <button
               key={b.id}
@@ -450,10 +475,10 @@ export function World({
           </span>
         )}
 
-        {labelFor !== null && (
+        {labelFor !== null && labelAt && (
           <span
             className="pointer-events-none absolute flex -translate-x-1/2 -translate-y-full flex-col items-center whitespace-nowrap"
-            style={{ ...pct(footprintCenter(positions[labelFor]).x, footprintCenter(positions[labelFor]).y - GRID.th * 0.95), zIndex: 3000 }}
+            style={{ ...pct(labelAt.x, spriteTop(BUILDINGS[labelFor].key, labelAt.y) - 6), zIndex: 3000 }}
           >
             <span className="clash-text font-display text-base sm:text-lg">{BUILDINGS[labelFor].name}</span>
             <span className="clash-text font-display text-xs text-[#ffd84a] sm:text-sm">Level {levels[labelFor] ?? 1}</span>
@@ -463,7 +488,7 @@ export function World({
         {!readOnly && pending > 0 && !move?.moved && (
           <button
             className="collect-bubble absolute flex -translate-x-1/2 flex-col items-center"
-            style={{ ...pct(goldMine.x, goldMine.y - 150), zIndex: 2000 }}
+            style={{ ...pct(goldMine.x, spriteTop("goldmine", goldMine.y) - 70), zIndex: 2000 }}
             onClick={(e) => {
               e.stopPropagation();
               onCollect?.();
@@ -484,7 +509,7 @@ export function World({
         {floatText && (
           <span
             className="coin-float clash-text pointer-events-none absolute font-display text-2xl text-[#ffd84a]"
-            style={{ ...pct(goldMine.x, goldMine.y - 165), zIndex: 2001 }}
+            style={{ ...pct(goldMine.x, spriteTop("goldmine", goldMine.y) - 85), zIndex: 2001 }}
           >
             {floatText}
           </span>

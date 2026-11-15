@@ -20,6 +20,8 @@ export const TRADE_MAX_LEVERAGE = 10;
 export const BATTLE_COLLATERAL = 1_000;
 /** Default live round length; the server can override it with ROUND_SECONDS. */
 export const ROUND_SECONDS = 30;
+/** Default time to choose a coin, side and leverage; the server can override it with PICK_SECONDS. */
+export const PICK_SECONDS = 20;
 /** Barracks level 5 allows 6x. */
 export const ARENA_MAX_LEVERAGE = 6;
 
