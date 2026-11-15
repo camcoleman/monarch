@@ -9,7 +9,7 @@ import {
   type WalletClient,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { ARENA_MAX_LEVERAGE, monadTestnet, monarchAbi } from "@monarch/shared";
+import { ARENA_MAX_LEVERAGE, MAX_BUILDING_LEVEL, monadTestnet, monarchAbi } from "@monarch/shared";
 import type { Config } from "./config";
 
 export interface SettleArgs {
@@ -50,7 +50,19 @@ export class Chain {
     return Boolean(this.publicClient);
   }
 
-  /** Battle leverage cap from the player's Mech Bay. */
+  /** Town Hall level, which decides the assets a player can trade. Max level without a contract. */
+  async getTownHallLevel(player: string): Promise<number> {
+    if (!this.publicClient || !this.address) return MAX_BUILDING_LEVEL;
+    const levels = await this.publicClient.readContract({
+      address: this.address,
+      abi: monarchAbi,
+      functionName: "getBuildings",
+      args: [getAddress(player)],
+    });
+    return levels[0];
+  }
+
+  /** Battle leverage cap from the player's Barracks. */
   async getMaxLeverage(player: string): Promise<number> {
     if (!this.publicClient || !this.address) return ARENA_MAX_LEVERAGE;
     return this.publicClient.readContract({

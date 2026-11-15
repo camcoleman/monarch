@@ -32,7 +32,7 @@ interface Props {
 }
 
 /** Area chart over millisecond timestamps; keeps the last value per second. */
-export function LineChart({ points, color = "#f5b301", height = 280, lines = [], precision = 2 }: Props) {
+export function LineChart({ points, color = "#e59b07", height = 280, lines = [], precision = 2 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
@@ -42,11 +42,11 @@ export function LineChart({ points, color = "#f5b301", height = 280, lines = [],
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#8b8799" },
-      grid: { vertLines: { color: "#1f1c2b" }, horzLines: { color: "#1f1c2b" } },
-      rightPriceScale: { borderColor: "#2a2638" },
-      timeScale: { borderColor: "#2a2638", timeVisible: true, secondsVisible: true },
-      crosshair: { horzLine: { labelBackgroundColor: "#2a2638" }, vertLine: { labelBackgroundColor: "#2a2638" } },
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#7b5f3c" },
+      grid: { vertLines: { color: "#e6d1a0" }, horzLines: { color: "#e6d1a0" } },
+      rightPriceScale: { borderColor: "#c9ac6c" },
+      timeScale: { borderColor: "#c9ac6c", timeVisible: true, secondsVisible: true },
+      crosshair: { horzLine: { labelBackgroundColor: "#8b5a2b" }, vertLine: { labelBackgroundColor: "#8b5a2b" } },
     });
     chartRef.current = chart;
     seriesRef.current = chart.addSeries(AreaSeries, {

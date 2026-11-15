@@ -1,14 +1,20 @@
 "use client";
 
+import { Bot, Lock, RotateCcw } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  ASSETS,
   BATTLE_COLLATERAL,
+  BOT_PLAYER,
+  DEFAULT_ASSET,
   LOOT_PCT,
+  assetInfo,
   goldPerWin,
   signedMessage,
   trophiesPerWin,
+  type AssetId,
   type BattleTick,
   type BattleView,
   type PlayerRef,
@@ -17,13 +23,14 @@ import {
 import { Celebration } from "@/components/Celebration";
 import { LineChart, type ChartPoint } from "@/components/LineChart";
 import { RegisterCard } from "@/components/RegisterCard";
-import { GoldCoin, LandIcon } from "@/components/base/ui";
+import { AssetCoin, GoldCoin, LandIcon, TrophyIcon } from "@/components/base/ui";
 import { useBuildings, useHistory, useMe } from "@/hooks/useMonarch";
 import { useGameActions } from "@/hooks/useSession";
 import { useNow } from "@/hooks/useNow";
 import { MONARCH_ADDRESS, explorerTx } from "@/lib/config";
 import { friendlyError } from "@/lib/errors";
-import { countdown, pct, usd } from "@/lib/format";
+import { countdown, pct, price as fmtPrice, usd } from "@/lib/format";
+import { startPractice, useGuestId } from "@/lib/practice";
 import { getSocket } from "@/lib/socket";
 
 type Series = Record<string, ChartPoint[]>;
@@ -31,6 +38,7 @@ type Series = Record<string, ChartPoint[]>;
 export default function BattlePage() {
   const { id } = useParams<{ id: string }>();
   const me = useMe();
+  const guestId = useGuestId();
   const now = useNow();
   const [battle, setBattle] = useState<BattleView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -60,7 +68,7 @@ export default function BattlePage() {
     };
     const onTick = (t: BattleTick) => {
       if (t.battleId !== id) return;
-      setBattle((b) => (b ? { ...b, returns: t.returns, lastPrice: t.price } : b));
+      setBattle((b) => (b ? { ...b, returns: t.returns, lastPrices: { ...b.lastPrices, ...t.prices } } : b));
       setSeries((s) => {
         const next: Series = { ...s };
         for (const [addr, r] of Object.entries(t.returns)) next[addr] = [...(s[addr] ?? []), { t: t.t, v: r }];
@@ -81,44 +89,45 @@ export default function BattlePage() {
 
   if (loadError) {
     return (
-      <div className="panel mx-auto max-w-md space-y-3 p-6 text-center">
-        <p className="text-lg">{loadError}</p>
-        <Link href="/" className="btn-gold">
-          Return to base
+      <div className="panel mx-auto max-w-md space-y-4 p-6 text-center">
+        <p className="font-display text-xl">{loadError}</p>
+        <Link href="/" className="btn-green">
+          Return home
         </Link>
       </div>
     );
   }
-  if (!battle) return <p className="hud-text text-center font-display tracking-widest">LOADING BATTLE...</p>;
+  if (!battle) return <p className="clash-text pt-16 text-center font-display text-2xl">Loading battle...</p>;
 
-  const myAddr = me.address;
+  const inBattle = (a: string | null | undefined) => !!a && (a === battle.creator.address || a === battle.opponent?.address);
+  const myAddr = [me.address, guestId].find(inBattle) ?? null;
   const isCreator = myAddr === battle.creator.address;
-  const isOpponent = !!battle.opponent && myAddr === battle.opponent.address;
-  const isPlayer = isCreator || isOpponent;
+  const isOpponent = !!myAddr && myAddr === battle.opponent?.address;
   const bottom: PlayerRef = isOpponent ? battle.opponent! : battle.creator;
   const top: PlayerRef | null = isOpponent ? battle.creator : battle.opponent;
+  const practice = battle.mode === "practice";
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <div className="text-center">
-        <p className="font-display text-xs uppercase tracking-[0.4em] text-neon">
-          {battle.mode === "match" ? "Matchmade battle" : "Challenge"}
+        <p className="clash-text font-display text-base text-[#ffd84a]">
+          {practice ? "Practice battle · no rewards" : battle.mode === "match" ? "Matchmade battle" : "Challenge"}
         </p>
-        <h1 className="font-display text-3xl font-black sm:text-4xl">
-          {battle.creator.name} <span className="text-orange-400">vs</span> {battle.opponent?.name ?? "???"}
+        <h1 className="clash-text font-display text-3xl sm:text-5xl">
+          {battle.creator.name} <span className="text-[#ff7552]">vs</span> {battle.opponent?.name ?? "???"}
         </h1>
       </div>
 
       {battle.phase === "lobby" && <Lobby battle={battle} isCreator={isCreator} />}
-      {battle.phase === "picking" && <PickPanel battle={battle} isPlayer={isPlayer} now={now} />}
+      {battle.phase === "picking" && <PickPanel battle={battle} myAddr={myAddr} now={now} />}
       {(battle.phase === "live" || battle.phase === "ended") && top && (
         <>
-          <PlayerPanel battle={battle} player={top} series={series} label={isPlayer ? "Opponent" : "Challenger"} />
-          <CenterBar battle={battle} now={now} myAddr={isPlayer ? myAddr! : null} />
-          <PlayerPanel battle={battle} player={bottom} series={series} label={isPlayer ? "You" : "Creator"} />
+          <PlayerPanel battle={battle} player={top} series={series} label={myAddr ? "Opponent" : "Challenger"} />
+          <CenterBar battle={battle} now={now} myAddr={myAddr} />
+          <PlayerPanel battle={battle} player={bottom} series={series} label={myAddr ? "You" : "Creator"} />
         </>
       )}
-      {battle.phase === "ended" && <Result battle={battle} myAddr={isPlayer ? myAddr! : null} />}
+      {battle.phase === "ended" && <Result battle={battle} myAddr={myAddr} />}
     </div>
   );
 }
@@ -162,16 +171,16 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
     <div className="panel mx-auto max-w-lg space-y-4 p-6 text-center">
       {isCreator ? (
         <>
-          <p className="text-lg">Waiting for a challenger...</p>
-          <p className="text-sm text-zinc-400">
+          <p className="font-display text-2xl">Waiting for a challenger...</p>
+          <p className="text-sm text-muted">
             {battle.requiredOpponent
               ? "Send this link to your target - only they can accept."
-              : "Share this link with a rival. Anyone with a base can accept."}
+              : "Share this link with a rival. Anyone with a village can accept."}
           </p>
           <div className="flex gap-2">
             <input readOnly value={link} className="input flex-1 font-mono text-xs" />
             <button
-              className="btn-gold"
+              className="btn-blue"
               onClick={() => {
                 navigator.clipboard.writeText(link);
                 setCopied(true);
@@ -184,54 +193,58 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
       ) : (
         <>
           <p className="text-lg">
-            <b className="text-gold">{battle.creator.name}</b> challenges you to a 90-second BTC battle.
+            <b>{battle.creator.name}</b> challenges you to a 90-second trading battle.
           </p>
-          <p className="text-sm text-zinc-400">
-            Each side gets {usd(BATTLE_COLLATERAL, 0)} of battle collateral and leverage up to their Mech Bay&apos;s limit. Highest
-            return wins land, gold and trophies.
+          <p className="text-sm text-muted">
+            Each side gets {usd(BATTLE_COLLATERAL, 0)} of battle collateral, trades any coin their Town Hall has unlocked, with leverage
+            up to their Barracks&apos; limit. Highest return wins land, gold and trophies.
           </p>
           {!canAct ? (
             <RegisterCard compact />
           ) : notForMe ? (
-            <p className="text-sm text-zinc-400">This challenge was sent to another commander.</p>
+            <p className="text-sm text-muted">This challenge was sent to another commander.</p>
           ) : (
-            <button className="btn-gold w-full text-lg" disabled={joining} onClick={accept}>
+            <button className="btn-red w-full text-xl" disabled={joining} onClick={accept}>
               {joining ? "Joining..." : "Accept challenge"}
             </button>
           )}
         </>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <p className="text-sm font-bold text-down">{error}</p>}
     </div>
   );
 }
 
-function PickPanel({ battle, isPlayer, now }: { battle: BattleView; isPlayer: boolean; now: number }) {
-  const me = useMe();
-  const maxLev = (me.address && battle.maxLeverage[me.address]) || 1;
+function PickPanel({ battle, myAddr, now }: { battle: BattleView; myAddr: string | null; now: number }) {
+  const unlocked = (myAddr && battle.unlocked[myAddr]) || [DEFAULT_ASSET];
+  const maxLev = (myAddr && battle.maxLeverage[myAddr]) || 1;
+  const [asset, setAsset] = useState<AssetId>(DEFAULT_ASSET);
   const [side, setSide] = useState<Side>("long");
   const [leverage, setLeverage] = useState(Math.min(3, maxLev));
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
   const { sign, session } = useGameActions();
-  const locked = me.address ? battle.picked[me.address] : false;
+  const practice = battle.mode === "practice";
+  const locked = myAddr ? battle.picked[myAddr] : false;
   const players = [battle.creator, battle.opponent!];
 
   const lockIn = async () => {
-    if (!me.address) return;
+    if (!myAddr) return;
     setError(null);
     setSigning(true);
     try {
-      let signature: string;
-      try {
-        signature = await sign(signedMessage.pick(battle.id, side, leverage));
-      } catch (err) {
-        setError(friendlyError(err));
-        return;
+      let signature = "";
+      if (!practice) {
+        try {
+          signature = await sign(signedMessage.pick(battle.id, asset, side, leverage));
+        } catch (err) {
+          setError(friendlyError(err));
+          return;
+        }
       }
       const res = await getSocket()
         .timeout(10_000)
-        .emitWithAck("battle:pick", { battleId: battle.id, address: me.address, side, leverage, signature });
+        .emitWithAck("battle:pick", { battleId: battle.id, address: myAddr, asset, side, leverage, signature });
       if (!res.ok) setError(res.error);
     } catch {
       setError("Referee server did not respond");
@@ -241,57 +254,92 @@ function PickPanel({ battle, isPlayer, now }: { battle: BattleView; isPlayer: bo
   };
 
   return (
-    <div className="panel mx-auto max-w-lg space-y-5 p-6">
+    <div className="panel mx-auto max-w-xl space-y-5 p-6">
       <div className="text-center">
-        <p className="text-sm text-zinc-400">Choose your position</p>
-        <p className="font-mono text-5xl text-gold">{countdown((battle.pickEndsAt ?? now) - now)}</p>
+        <p className="text-sm font-extrabold text-muted">Choose your trade</p>
+        <p className="font-display text-6xl text-[#e59b07] [text-shadow:0_3px_0_#1d1206]">{countdown((battle.pickEndsAt ?? now) - now)}</p>
       </div>
       <div className="grid grid-cols-2 gap-2 text-sm">
         {players.map((p) => (
-          <div key={p.address} className="rounded-xl border border-edge p-3 text-center">
-            <p className="font-semibold">{p.name}</p>
-            <p className={battle.picked[p.address] ? "text-up" : "text-zinc-500"}>
-              {battle.picked[p.address] ? "Locked in" : "Deciding..."}
-            </p>
+          <div key={p.address} className="well flex items-center justify-center gap-2 p-3 text-center">
+            {p.address === BOT_PLAYER.address && <Bot size={18} strokeWidth={3} />}
+            <div>
+              <p className="font-extrabold">{p.name}</p>
+              <p className={`font-display ${battle.picked[p.address] ? "text-up" : "text-muted"}`}>
+                {battle.picked[p.address] ? "Ready!" : "Deciding..."}
+              </p>
+            </div>
           </div>
         ))}
       </div>
-      {isPlayer && !locked && (
+      {myAddr && !locked && (
         <>
+          <div className="space-y-2">
+            <p className="font-display text-lg">Coin</p>
+            <div className="grid grid-cols-5 gap-2">
+              {ASSETS.map((a) => {
+                const open = unlocked.includes(a.id);
+                const active = asset === a.id;
+                return (
+                  <button
+                    key={a.id}
+                    disabled={!open}
+                    onClick={() => setAsset(a.id)}
+                    title={open ? a.name : `Unlocks at Town Hall ${a.unlock}`}
+                    className={`relative flex flex-col items-center gap-1 rounded-xl border-[3px] py-2 transition ${
+                      active ? "border-[#1d1206] bg-[#fff3a0] shadow-[0_3px_0_#1d1206]" : "border-[#c9ac6c] bg-[#efdfb8]"
+                    } disabled:cursor-not-allowed disabled:opacity-60`}
+                  >
+                    <AssetCoin asset={a.id} size={36} locked={!open} />
+                    <span className="text-[11px] font-extrabold">{open ? a.id : `TH ${a.unlock}`}</span>
+                    {!open && <Lock size={14} strokeWidth={3} className="absolute right-1 top-1" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <button
-              className={`btn ${side === "long" ? "bg-up text-ink" : "border border-edge text-zinc-300"}`}
+              className={`${side === "long" ? "btn-green" : "btn-ghost"} text-xl`}
               onClick={() => setSide("long")}
             >
-              Long BTC
+              ▲ Long
             </button>
             <button
-              className={`btn ${side === "short" ? "bg-down text-white" : "border border-edge text-zinc-300"}`}
+              className={`${side === "short" ? "btn-red" : "btn-ghost"} text-xl`}
               onClick={() => setSide("short")}
             >
-              Short BTC
+              ▼ Short
             </button>
           </div>
-          <label className="block space-y-1">
-            <span className="flex justify-between text-sm text-zinc-400">
-              Leverage (Mech Bay max {maxLev}x) <span className="font-mono text-gold">{leverage}x</span>
-            </span>
-            <input
-              type="range"
-              min={1}
-              max={maxLev}
-              value={leverage}
-              onChange={(e) => setLeverage(Number(e.target.value))}
-              className="w-full accent-[#f5b301]"
-            />
-          </label>
-          <button className="btn-gold w-full text-lg" disabled={signing} onClick={lockIn}>
-            {signing ? (session.active ? "Locking in..." : "Sign in your wallet...") : `Lock in ${side} ${leverage}x`}
+          <div className="space-y-1">
+            <p className="flex justify-between font-display text-lg">
+              Leverage <span className="text-muted">{practice ? "Practice max" : "Barracks max"} {maxLev}x</span>
+            </p>
+            <div className="flex gap-1.5">
+              {Array.from({ length: maxLev }, (_, i) => i + 1).map((l) => (
+                <button
+                  key={l}
+                  onClick={() => setLeverage(l)}
+                  className={`flex-1 py-1.5 text-lg ${leverage === l ? "btn-gold" : "btn-ghost"}`}
+                >
+                  {l}x
+                </button>
+              ))}
+            </div>
+          </div>
+          <button className="btn-red w-full text-2xl" disabled={signing} onClick={lockIn}>
+            {signing
+              ? practice || session.active
+                ? "Locking in..."
+                : "Sign in your wallet..."
+              : `Lock in ${side} ${asset} ${leverage}x`}
           </button>
-          <p className="text-center text-xs text-zinc-500">No pick by the deadline defaults to long 1x.</p>
+          <p className="text-center text-xs text-muted">No pick by the deadline defaults to long BTC 1x.</p>
         </>
       )}
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {myAddr && locked && <p className="text-center font-display text-xl text-up">Locked in! Waiting for your opponent...</p>}
+      {error && <p className="text-sm font-bold text-down">{error}</p>}
     </div>
   );
 }
@@ -309,27 +357,38 @@ function PlayerPanel({
 }) {
   const pick = battle.picks?.[player.address];
   const ret = battle.returns[player.address] ?? 0;
-  const color = ret >= 0 ? "#22c55e" : "#ef4444";
+  const color = ret >= 0 ? "#3a9d23" : "#d6362a";
   const isWinner = battle.winner === player.address;
+  const entry = pick && battle.entryPrices?.[pick.asset];
+  const last = pick && battle.lastPrices?.[pick.asset];
   return (
-    <div className={`panel p-4 ${isWinner ? "border-gold/70" : ""}`}>
-      <div className="mb-2 flex items-end justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-widest text-zinc-500">{label}</p>
-          <p className="text-lg font-semibold">
-            {player.name} {isWinner && "👑"}
-          </p>
-          {pick && (
-            <p className={`text-sm font-bold ${pick.side === "long" ? "text-up" : "text-down"}`}>
-              {pick.side.toUpperCase()} BTC · {pick.leverage}x
+    <div className={`panel p-4 ${isWinner ? "ring-4 ring-[#ffd84a]" : ""}`}>
+      <div className="mb-2 flex items-end justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {pick && <AssetCoin asset={pick.asset} size={44} />}
+          <div>
+            <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{label}</p>
+            <p className="flex items-center gap-1.5 font-display text-xl">
+              {player.address === BOT_PLAYER.address && <Bot size={18} strokeWidth={3} />}
+              {player.name} {isWinner && "👑"}
             </p>
-          )}
+            {pick && (
+              <p className={`font-display ${pick.side === "long" ? "text-up" : "text-down"}`}>
+                {pick.side === "long" ? "▲ LONG" : "▼ SHORT"} {pick.asset} · {pick.leverage}x
+              </p>
+            )}
+          </div>
         </div>
         <div className="text-right">
-          <p className="font-mono text-4xl font-bold" style={{ color }}>
+          <p className="font-display text-4xl" style={{ color }}>
             {pct(ret, 3)}
           </p>
-          <p className="font-mono text-sm text-zinc-400">{usd(BATTLE_COLLATERAL * (1 + ret / 100))}</p>
+          <p className="font-mono text-sm font-bold text-muted">{usd(BATTLE_COLLATERAL * (1 + ret / 100))}</p>
+          {entry && last && (
+            <p className="font-mono text-xs text-muted">
+              {fmtPrice(entry)} → {fmtPrice(last)}
+            </p>
+          )}
         </div>
       </div>
       <LineChart points={series[player.address] ?? []} color={color} height={150} precision={3} />
@@ -348,73 +407,123 @@ function CenterBar({ battle, now, myAddr }: { battle: BattleView; now: number; m
       : !myAddr
         ? "Live"
         : mine > theirs
-          ? "You're winning"
+          ? "You're winning!"
           : mine < theirs
-            ? "You're losing"
+            ? "You're losing!"
             : "Dead even";
+  const assets = [...new Set(Object.values(battle.picks ?? {}).map((p) => p.asset))];
   return (
-    <div className="grid grid-cols-2 items-center gap-2 rounded-2xl border border-gold/30 bg-gold/5 px-4 py-3 sm:flex sm:justify-between sm:px-6">
-      <div className="text-sm text-zinc-400">
-        Entry <span className="font-mono text-zinc-200">{battle.entryPrice ? usd(battle.entryPrice) : "-"}</span>
+    <div className="wood-header flex flex-wrap items-center justify-between gap-2 rounded-2xl border-[3px] border-[#1d1206] px-4 py-3 shadow-[0_4px_0_#1d1206] sm:px-6">
+      <div className="flex flex-wrap gap-3">
+        {assets.map((a) => (
+          <span key={a} className="flex items-center gap-1.5">
+            <AssetCoin asset={a} size={22} />
+            <span className="clash-text font-display text-sm">
+              {battle.lastPrices?.[a] ? fmtPrice(battle.lastPrices[a]!) : "-"}
+            </span>
+          </span>
+        ))}
       </div>
-      <div className="order-first col-span-2 text-center sm:order-none">
-        <p className="font-mono text-4xl font-bold text-gold">
+      <div className="text-center">
+        <p className="clash-text font-display text-4xl text-[#ffd84a]">
           {battle.phase === "live" ? countdown((battle.endsAt ?? now) - now) : "00:00"}
         </p>
-        <p className="text-sm font-semibold">{status}</p>
+        <p className="clash-text font-display text-sm">{status}</p>
       </div>
-      <div className="text-right text-sm text-zinc-400">
-        BTC <span className="font-mono text-zinc-200">{battle.lastPrice ? usd(battle.lastPrice) : "-"}</span>
+      <div className="clash-text hidden font-display text-sm sm:block">
+        {assets.map((a) => assetInfo(a).name).join(" vs ")}
       </div>
     </div>
   );
 }
 
 function Result({ battle, myAddr }: { battle: BattleView; myAddr: string | null }) {
+  const router = useRouter();
+  const me = useMe();
   const winner = battle.winner === battle.creator.address ? battle.creator : battle.opponent!;
   const loser = winner === battle.creator ? battle.opponent! : battle.creator;
   const won = myAddr === battle.winner;
+  const practice = battle.mode === "practice";
+  const [restarting, setRestarting] = useState(false);
+
+  const again = async () => {
+    setRestarting(true);
+    try {
+      router.push(`/battle/${await startPractice(me.address)}`);
+    } catch {
+      setRestarting(false);
+    }
+  };
+
+  return (
+    <div className="panel space-y-4 p-6 text-center">
+      {(won || !myAddr) && <Celebration count={won ? 48 : 24} />}
+      <p
+        className={`pop-in font-display text-6xl ${!myAddr || won ? "text-[#ffbf1f]" : "text-down"}`}
+        style={{ textShadow: "0 4px 0 #1d1206, 2px 0 0 #1d1206, -2px 0 0 #1d1206, 0 -2px 0 #1d1206" }}
+      >
+        {!myAddr ? `${winner.name} wins` : won ? "Victory!" : "Defeat"}
+      </p>
+      {practice ? (
+        <>
+          <p>
+            {won ? "You out-traded the Training Bot." : "The Training Bot got you this time."} Practice battles are off-chain, so
+            no trophies, gold or land change hands.
+          </p>
+          <div className="flex flex-wrap justify-center gap-3">
+            <button className="btn-green text-lg" disabled={restarting} onClick={again}>
+              <RotateCcw size={18} strokeWidth={3} /> {restarting ? "Starting..." : "Play again"}
+            </button>
+            <Link href="/" className="btn-ghost text-lg">
+              {me.player ? "Return to village" : "Build a real village"}
+            </Link>
+          </div>
+        </>
+      ) : (
+        <RealRewards battle={battle} winner={winner} loser={loser} />
+      )}
+    </div>
+  );
+}
+
+function RealRewards({ battle, winner, loser }: { battle: BattleView; winner: PlayerRef; loser: PlayerRef }) {
   const { levels } = useBuildings(winner.address);
   const { records } = useHistory(battle.txHash ? winner.address : undefined, 1);
   const loot = battle.txHash && records[0]?.loser === loser.address ? records[0].loot : null;
   const gold = goldPerWin(levels?.[1] ?? 1);
   return (
-    <div className="panel space-y-3 p-6 text-center">
-      {(won || !myAddr) && <Celebration count={won ? 48 : 24} />}
-      <p className={`pop-in font-display text-5xl font-black ${!myAddr || won ? "text-gold" : "text-down"}`}>
-        {!myAddr ? `${winner.name} wins` : won ? "VICTORY" : "DEFEAT"}
-      </p>
-      <p className="text-zinc-300">
+    <>
+      <p>
         {winner.name} raids {loser.name} and claims new territory.
       </p>
-      <div className="flex flex-wrap justify-center gap-6 font-display text-lg">
-        <span className="pop-in" style={{ animationDelay: "0.2s" }}>
-          🏆 +{trophiesPerWin(levels?.[3] ?? 1)}
+      <div className="flex flex-wrap justify-center gap-6 font-display text-2xl">
+        <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.2s" }}>
+          <TrophyIcon size={26} /> +{trophiesPerWin(levels?.[3] ?? 1)}
         </span>
         <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.35s" }}>
-          <GoldCoin size={20} /> +{gold}
-          <span className="text-sm text-amber-200">{loot !== null ? ` +${loot} loot` : ` +${LOOT_PCT}% loot`}</span>
+          <GoldCoin size={24} /> +{gold}
+          <span className="text-base text-[#b07800]">{loot !== null ? ` +${loot} loot` : ` +${LOOT_PCT}% loot`}</span>
         </span>
         <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.5s" }}>
-          <LandIcon size={20} /> +1
+          <LandIcon size={26} /> +1
         </span>
       </div>
       <p className="text-sm">
         {battle.txHash ? (
-          <a className="text-royal underline" href={explorerTx(battle.txHash)} target="_blank" rel="noreferrer">
+          <a className="font-bold text-sky underline" href={explorerTx(battle.txHash)} target="_blank" rel="noreferrer">
             Recorded on Monad Testnet - view transaction
           </a>
         ) : battle.settleError ? (
-          <span className="text-red-400">
+          <span className="text-down">
             Couldn&apos;t record this result on-chain ({battle.settleError}). The referee wallet may be out of MON.
           </span>
         ) : (
-          <span className="animate-pulse text-zinc-400">Recording on Monad Testnet...</span>
+          <span className="animate-pulse text-muted">Recording on Monad Testnet...</span>
         )}
       </p>
-      <Link href="/" className="btn-gold">
-        Return to base
+      <Link href="/" className="btn-green text-lg">
+        Return to village
       </Link>
-    </div>
+    </>
   );
 }

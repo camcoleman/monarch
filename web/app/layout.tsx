@@ -1,23 +1,23 @@
 import type { Metadata } from "next";
-import { Exo_2, Orbitron } from "next/font/google";
+import { Lilita_One, Nunito } from "next/font/google";
 import type { ReactNode } from "react";
 import { Nav } from "@/components/Nav";
 import { StatusBanner } from "@/components/StatusBanner";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const orbitron = Orbitron({ subsets: ["latin"], variable: "--font-orbitron", weight: ["500", "700", "900"] });
-const exo = Exo_2({ subsets: ["latin"], variable: "--font-exo" });
+const lilita = Lilita_One({ subsets: ["latin"], variable: "--font-lilita", weight: "400" });
+const nunito = Nunito({ subsets: ["latin"], variable: "--font-nunito", weight: ["600", "700", "800", "900"] });
 
 export const metadata: Metadata = {
   title: "MONARCH - Trade. Conquer. Rule.",
-  description: "Build a futuristic base and win BTC trading battles to expand your territory, on Monad.",
+  description: "Build your village and win crypto trading battles to expand your territory, on Monad.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${orbitron.variable} ${exo.variable}`}>
-      <body className="font-sans antialiased">
+    <html lang="en" className={`${lilita.variable} ${nunito.variable}`}>
+      <body className="font-sans font-semibold antialiased">
         <Providers>
           <Nav />
           <StatusBanner />

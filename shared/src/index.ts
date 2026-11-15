@@ -18,7 +18,7 @@ export const FAUCET_URL = "https://faucet.monad.xyz";
 export const PAPER_START_BALANCE = 10_000;
 export const TRADE_MAX_LEVERAGE = 10;
 export const BATTLE_COLLATERAL = 1_000;
-/** Mech Bay level 5 allows 6x. */
+/** Barracks level 5 allows 6x. */
 export const ARENA_MAX_LEVERAGE = 6;
 
 export const STARTING_GOLD = 200;
@@ -43,39 +43,61 @@ export const maxLeverage = (mechBayLevel: number) => Math.max(1, mechBayLevel + 
 export const extractorRate = (level: number) => EXTRACTOR_RATE_PER_LEVEL * level;
 export const extractorCap = (level: number) => EXTRACTOR_CAP_PER_LEVEL * level;
 
+/** Tradable coins. Each Town Hall level unlocks the asset with that `unlock` level. */
+export const ASSETS = [
+  { id: "BTC", name: "Bitcoin", product: "BTC-USD", color: "#f7931a", unlock: 1, mockStart: 97_000 },
+  { id: "ETH", name: "Ethereum", product: "ETH-USD", color: "#627eea", unlock: 2, mockStart: 3_400 },
+  { id: "SOL", name: "Solana", product: "SOL-USD", color: "#14c38e", unlock: 3, mockStart: 180 },
+  { id: "DOGE", name: "Dogecoin", product: "DOGE-USD", color: "#c2a633", unlock: 4, mockStart: 0.2 },
+  { id: "MON", name: "Monad", product: "MON-USD", color: "#836ef9", unlock: 5, mockStart: 0.03 },
+] as const;
+
+export type AssetId = (typeof ASSETS)[number]["id"];
+export type AssetInfo = (typeof ASSETS)[number];
+export type AssetPrices = Partial<Record<AssetId, number>>;
+
+export const ASSET_IDS: AssetId[] = ASSETS.map((a) => a.id);
+export const DEFAULT_ASSET: AssetId = "BTC";
+
+export const assetInfo = (id: AssetId): AssetInfo => ASSETS.find((a) => a.id === id) ?? ASSETS[0];
+export const isAsset = (x: unknown): x is AssetId => typeof x === "string" && (ASSET_IDS as string[]).includes(x);
+export const unlockedAssets = (townHallLevel: number): AssetId[] =>
+  ASSETS.filter((a) => a.unlock <= Math.max(1, townHallLevel)).map((a) => a.id);
+
 /** Index is the on-chain building ID. Upgrade cost to level N is baseCost * N. */
 export const BUILDINGS = [
   {
     id: 0,
-    key: "commandcenter",
-    name: "Command Center",
+    key: "townhall",
+    name: "Town Hall",
     baseCost: 100,
-    effect: (lv: number) => `Max building level ${lv}`,
-    description: "The heart of your base. No other building can be upgraded past its level.",
+    effect: (lv: number) =>
+      `Max building level ${lv} · trade ${unlockedAssets(lv).join(", ")}`,
+    description: "The heart of your village. Caps every other building's level, and each level unlocks a new coin to trade.",
   },
   {
     id: 1,
-    key: "extractor",
-    name: "Gold Extractor",
+    key: "goldmine",
+    name: "Gold Mine",
     baseCost: 60,
     effect: (lv: number) => `${extractorRate(lv)} gold/min · +${goldPerWin(lv) - GOLD_PER_WIN} gold per win`,
     description: "Mines gold over time (tap to collect) and boosts every victory's reward.",
   },
   {
     id: 2,
-    key: "mechbay",
-    name: "Mech Bay",
+    key: "barracks",
+    name: "Barracks",
     baseCost: 50,
     effect: (lv: number) => `Up to ${maxLeverage(lv)}x leverage in battle`,
-    description: "Builds your war machines. Higher levels unlock more battle leverage.",
+    description: "Trains your troops. Higher levels unlock more battle leverage.",
   },
   {
     id: 3,
-    key: "trophyvault",
-    name: "Trophy Vault",
+    key: "trophyhall",
+    name: "Trophy Hall",
     baseCost: 80,
     effect: (lv: number) => `${trophiesPerWin(lv)} trophies per win`,
-    description: "Stores your glory. Each level adds trophies to every victory.",
+    description: "Shows off your glory. Each level adds trophies to every victory.",
   },
 ] as const;
 
@@ -115,7 +137,13 @@ export interface PriceTick {
   t: number;
 }
 
-/** Rolling 24h BTC-USD market stats. */
+/** One referee tick: the latest price of every asset with a live feed. */
+export interface PricesTick {
+  t: number;
+  p: AssetPrices;
+}
+
+/** Rolling 24h market stats for one asset. */
 export interface MarketStats {
   open24h: number;
   high24h: number;
@@ -128,7 +156,11 @@ export interface PlayerRef {
   name: string;
 }
 
+/** Practice battles are fought against this pseudo-player. */
+export const BOT_PLAYER: PlayerRef = { address: "bot", name: "Training Bot" };
+
 export interface Pick {
+  asset: AssetId;
   side: Side;
   leverage: number;
 }
@@ -138,20 +170,22 @@ export type BattlePhase = "lobby" | "picking" | "live" | "ended";
 export interface BattleView {
   id: string;
   onchainId: string;
-  /** "match" came from Attack matchmaking; "challenge" was a direct invite. */
-  mode: "match" | "challenge";
+  /** "match" came from Attack matchmaking, "challenge" was a direct invite, "practice" is off-chain vs the bot. */
+  mode: "match" | "challenge" | "practice";
   phase: BattlePhase;
   creator: PlayerRef;
   opponent: PlayerRef | null;
   /** If set, only this address may accept the challenge. */
   requiredOpponent: string | null;
-  /** Leverage cap per player, from their Mech Bay. */
+  /** Leverage cap per player, from their Barracks. */
   maxLeverage: Record<string, number>;
+  /** Assets each player may trade, from their Town Hall. */
+  unlocked: Record<string, AssetId[]>;
   picked: Record<string, boolean>;
   /** Only revealed once the round is live. */
   picks: Record<string, Pick> | null;
-  entryPrice: number | null;
-  lastPrice: number | null;
+  entryPrices: AssetPrices | null;
+  lastPrices: AssetPrices | null;
   pickEndsAt: number | null;
   endsAt: number | null;
   returns: Record<string, number>;
@@ -175,7 +209,7 @@ export interface BattleSummary {
 
 export interface BattleTick {
   battleId: string;
-  price: number;
+  prices: AssetPrices;
   t: number;
   returns: Record<string, number>;
 }
@@ -194,8 +228,8 @@ export const signedMessage = {
   challenge: (target: string | null, timestamp: number) =>
     `MONARCH: issue a challenge\nto:${target ? target.toLowerCase() : "anyone"}\nat:${timestamp}`,
   join: (battleId: string) => `MONARCH: accept battle\nbattle:${battleId}`,
-  pick: (battleId: string, side: Side, leverage: number) =>
-    `MONARCH: lock in ${side} ${leverage}x\nbattle:${battleId}`,
+  pick: (battleId: string, asset: AssetId, side: Side, leverage: number) =>
+    `MONARCH: lock in ${side} ${asset} ${leverage}x\nbattle:${battleId}`,
 };
 
 interface Signed {
@@ -219,8 +253,16 @@ export interface JoinBattlePayload extends Signed {
 
 export interface PickPayload extends Signed {
   battleId: string;
+  asset: AssetId;
   side: Side;
   leverage: number;
+}
+
+export interface PracticePayload {
+  /** Connected wallet, if any. Omitted for guests. */
+  address?: string;
+  /** A guest id from an earlier practice battle, reused so the browser stays "you". */
+  guestId?: string;
 }
 
 export interface ClientToServerEvents {
@@ -230,12 +272,14 @@ export interface ClientToServerEvents {
   "battle:watch": (p: { battleId: string }, ack: (r: Ack<{ battle: BattleView }>) => void) => void;
   "battle:join": (p: JoinBattlePayload, ack: (r: Ack) => void) => void;
   "battle:pick": (p: PickPayload, ack: (r: Ack) => void) => void;
+  /** Starts an off-chain practice battle against the bot. No wallet or signature needed. */
+  "battle:practice": (p: PracticePayload, ack: (r: Ack<{ battleId: string; playerId: string }>) => void) => void;
 }
 
 export interface ServerToClientEvents {
-  price: (tick: PriceTick) => void;
-  "price:history": (ticks: PriceTick[]) => void;
-  market: (stats: MarketStats) => void;
+  prices: (tick: PricesTick) => void;
+  "price:history": (history: Partial<Record<AssetId, PriceTick[]>>) => void;
+  market: (stats: Partial<Record<AssetId, MarketStats>>) => void;
   "battle:state": (battle: BattleView) => void;
   "battle:tick": (tick: BattleTick) => void;
   /** Every battle that is open, in progress, or recently ended. */

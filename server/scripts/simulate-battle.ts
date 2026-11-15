@@ -60,12 +60,12 @@ const capOf = (addr: string) => caps[addr.toLowerCase()] ?? 1;
 
 let ticks = 0;
 a.on("battle:tick", (t) => {
-  if (++ticks % 4 === 0) console.log(`tick $${t.price}`, t.returns);
+  if (++ticks % 4 === 0) console.log(`tick BTC $${t.prices.BTC}`, t.returns);
 });
 
 const finished = new Promise<void>((resolve) => {
   a.on("battle:state", (s) => {
-    console.log(`phase=${s.phase}${s.entryPrice ? ` entry=$${s.entryPrice}` : ""}`);
+    console.log(`phase=${s.phase}${s.entryPrices ? ` entry=${JSON.stringify(s.entryPrices)}` : ""}`);
     if (s.phase === "ended" && (s.txHash || s.settleError)) {
       console.log(`winner=${s.winner} tx=${s.txHash ?? "-"} settleError=${s.settleError ?? "-"}`);
       resolve();
@@ -78,14 +78,16 @@ for (const [s, acct, side] of [
   [b, bob, "short"],
 ] as const) {
   const leverage = capOf(acct.address);
+  const asset = "BTC";
   expectOk(
     `pick ${side}`,
     await s.emitWithAck("battle:pick", {
       battleId,
       address: acct.address,
+      asset,
       side,
       leverage,
-      signature: await acct.signMessage({ message: signedMessage.pick(battleId, side, leverage) }),
+      signature: await acct.signMessage({ message: signedMessage.pick(battleId, asset, side, leverage) }),
     })
   );
 }

@@ -3,15 +3,15 @@
 import { ChevronLeft, Radio, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { FAUCET_URL } from "@monarch/shared";
+import { FAUCET_URL, isAsset, unlockedAssets } from "@monarch/shared";
 import { useHistory, usePlayers, useRecentBattles, type BattleRecord } from "@/hooks/useMonarch";
 import { useLiveBattles, useMarket } from "@/hooks/useLiveBattles";
 import { useNow } from "@/hooks/useNow";
 import { SESSION_FUNDING, useSession } from "@/hooks/useSession";
 import { friendlyError } from "@/lib/errors";
-import { countdown, pct, shortAddr, usd } from "@/lib/format";
-import { useLatestPrice } from "@/lib/priceStore";
-import { GoldCoin, HoloModal } from "./ui";
+import { countdown, pct, price as fmtPrice, shortAddr } from "@/lib/format";
+import { useLatestPrice, useSelectedAsset } from "@/lib/priceStore";
+import { AssetCoin, ClashModal, GoldCoin } from "./ui";
 
 function ago(seconds: number) {
   const s = Math.max(0, Math.floor(Date.now() / 1000 - seconds));
@@ -30,9 +30,9 @@ export function BattleLogModal({ address, onClose }: { address: string; onClose:
   const { records, isLoading } = useHistory(address);
   const nameOf = useNameOf();
   return (
-    <HoloModal title="Battle log" onClose={onClose} wide>
+    <ClashModal title="Battle Log" onClose={onClose} wide>
       {records.length === 0 ? (
-        <p className="py-8 text-center text-zinc-400">{isLoading ? "Loading from Monad..." : "No battles yet. Hit Attack!"}</p>
+        <p className="py-8 text-center text-muted">{isLoading ? "Loading from Monad..." : "No battles yet. Hit Attack!"}</p>
       ) : (
         <ul className="space-y-2">
           {records.map((r, i) => {
@@ -43,34 +43,32 @@ export function BattleLogModal({ address, onClose }: { address: string; onClose:
             return (
               <li
                 key={i}
-                className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${
-                  won ? "border-emerald-400/30 bg-emerald-400/5" : "border-red-400/30 bg-red-400/5"
+                className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 ${
+                  won ? "border-up/50 bg-[#e3f5c8]" : "border-down/40 bg-[#f8d9cf]"
                 }`}
               >
-                <span className={`w-20 font-display text-sm font-black ${won ? "text-emerald-300" : "text-red-300"}`}>
-                  {won ? "VICTORY" : "DEFEAT"}
-                </span>
+                <span className={`w-20 font-display text-base ${won ? "text-up" : "text-down"}`}>{won ? "Victory" : "Defeat"}</span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate">
                     vs{" "}
-                    <Link href={`/kingdom/${rival}`} className="font-semibold hover:text-neon">
+                    <Link href={`/kingdom/${rival}`} className="font-extrabold hover:underline">
                       {nameOf(rival)}
                     </Link>
                   </p>
-                  <p className="font-mono text-xs text-zinc-400">
+                  <p className="font-mono text-xs text-muted">
                     {pct(myBps / 100)} vs {pct(theirBps / 100)} · {ago(r.timestamp)}
                   </p>
                 </div>
-                <span className={`flex items-center gap-1 font-display text-sm ${won ? "text-amber-200" : "text-red-300"}`}>
+                <span className={`flex items-center gap-1 font-display ${won ? "text-up" : "text-down"}`}>
                   {won ? "+" : "-"}
-                  {r.loot} <GoldCoin size={14} />
+                  {r.loot} <GoldCoin size={16} />
                 </span>
               </li>
             );
           })}
         </ul>
       )}
-    </HoloModal>
+    </ClashModal>
   );
 }
 
@@ -87,79 +85,71 @@ export function LiveFeed() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="holo pointer-events-auto absolute left-0 top-1/2 z-[150] flex -translate-y-1/2 flex-col items-center gap-1 rounded-r-2xl border-l-0 px-1.5 py-4"
+        className="pointer-events-auto absolute left-0 top-1/2 z-[150] flex -translate-y-1/2 flex-col items-center gap-1 rounded-r-2xl border-[3px] border-l-0 border-[#1d1206] bg-[linear-gradient(90deg,#8b5a2b,#b07c45)] px-1.5 py-4 shadow-[0_3px_0_#1d1206]"
         aria-label="Open live feed"
       >
-        <Radio size={18} className="text-red-400" />
-        <span className="font-display text-[10px] font-bold tracking-widest [writing-mode:vertical-rl]">LIVE</span>
+        <Radio size={18} strokeWidth={3} className="text-white drop-shadow-[0_1px_0_#1d1206]" />
+        <span className="clash-text font-display text-xs tracking-wider [writing-mode:vertical-rl]">LIVE</span>
         {running.length > 0 && (
-          <span className="rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">{running.length}</span>
+          <span className="rounded-full border-2 border-[#1d1206] bg-down px-1.5 font-display text-[11px] text-white">{running.length}</span>
         )}
       </button>
       {open && (
         <div className="fixed inset-0 z-[250]" onClick={() => setOpen(false)}>
           <aside
-            className="slide-in-left holo absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col rounded-r-3xl"
+            className="slide-in-left panel absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-hidden rounded-l-none rounded-r-3xl border-l-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-neon/25 px-4 py-3">
-              <h2 className="hud-text flex items-center gap-2 font-display font-bold">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" /> LIVE BATTLES
+            <div className="wood-header flex items-center justify-between px-4 py-3">
+              <h2 className="clash-text flex items-center gap-2 font-display text-xl">
+                <span className="h-2.5 w-2.5 animate-pulse rounded-full border border-[#1d1206] bg-down" /> Live Battles
               </h2>
-              <button onClick={() => setOpen(false)} className="text-cyan-200" aria-label="Close">
-                <ChevronLeft />
+              <button onClick={() => setOpen(false)} className="btn-red h-8 w-8 rounded-lg p-0" aria-label="Close">
+                <ChevronLeft size={20} strokeWidth={4} />
               </button>
             </div>
             <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              {live.length === 0 && <p className="text-sm text-zinc-500">No battles right now.</p>}
-              {live.map((b) => {
-                const a = b.creator;
-                const o = b.opponent;
-                return (
-                  <Link
-                    key={b.id}
-                    href={`/battle/${b.id}`}
-                    className="block rounded-2xl border border-neon/20 bg-slate-950/50 p-3 transition hover:border-neon/60"
-                  >
-                    <div className="mb-1 flex items-center justify-between text-[10px] uppercase tracking-widest">
-                      <span className={b.phase === "live" ? "text-red-400" : "text-zinc-400"}>
-                        {b.phase === "lobby" ? "Open invite" : b.phase === "picking" ? "Choosing sides" : b.phase === "live" ? "● Live" : "Ended"}
-                      </span>
-                      {b.phase === "live" && b.endsAt && <span className="font-mono text-zinc-300">{countdown(b.endsAt - now)}</span>}
-                    </div>
-                    {[a, o].map((p, i) =>
-                      p ? (
-                        <div key={p.address} className="flex justify-between text-sm">
-                          <span className={b.winner === p.address ? "font-bold text-gold" : ""}>
-                            {b.winner === p.address && "👑 "}
-                            {p.name}
-                          </span>
-                          <span className={`font-mono ${(b.returns[p.address] ?? 0) >= 0 ? "text-up" : "text-down"}`}>
-                            {b.returns[p.address] !== undefined ? pct(b.returns[p.address], 2) : "-"}
-                          </span>
-                        </div>
-                      ) : (
-                        <p key={i} className="text-sm text-zinc-500">
-                          Waiting for opponent...
-                        </p>
-                      )
-                    )}
-                    <p className="mt-1 text-right text-[10px] text-neon">Watch →</p>
-                  </Link>
-                );
-              })}
+              {live.length === 0 && <p className="text-sm text-muted">No battles right now.</p>}
+              {live.map((b) => (
+                <Link key={b.id} href={`/battle/${b.id}`} className="well block p-3 transition hover:brightness-105">
+                  <div className="mb-1 flex items-center justify-between font-display text-xs">
+                    <span className={b.phase === "live" ? "text-down" : "text-muted"}>
+                      {b.phase === "lobby" ? "Open invite" : b.phase === "picking" ? "Choosing sides" : b.phase === "live" ? "● Live" : "Ended"}
+                    </span>
+                    {b.phase === "live" && b.endsAt && <span className="font-mono">{countdown(b.endsAt - now)}</span>}
+                  </div>
+                  {[b.creator, b.opponent].map((p, i) =>
+                    p ? (
+                      <div key={p.address} className="flex justify-between text-sm">
+                        <span className={b.winner === p.address ? "font-extrabold text-[#b07800]" : ""}>
+                          {b.winner === p.address && "👑 "}
+                          {p.name}
+                        </span>
+                        <span className={`font-mono font-bold ${(b.returns[p.address] ?? 0) >= 0 ? "text-up" : "text-down"}`}>
+                          {b.returns[p.address] !== undefined ? pct(b.returns[p.address], 2) : "-"}
+                        </span>
+                      </div>
+                    ) : (
+                      <p key={i} className="text-sm text-muted">
+                        Waiting for opponent...
+                      </p>
+                    )
+                  )}
+                  <p className="mt-1 text-right font-display text-xs text-sky">Watch →</p>
+                </Link>
+              ))}
               <div>
-                <h3 className="mb-2 font-display text-xs uppercase tracking-widest text-zinc-400">On-chain results</h3>
+                <h3 className="mb-2 font-display text-base">On-chain results</h3>
                 <ul className="space-y-1.5 text-sm">
                   {records.map((r: BattleRecord, i) => (
                     <li key={i} className="flex justify-between gap-2">
                       <span className="truncate">
-                        <span className="text-gold">{nameOf(r.winner)}</span> beat {nameOf(r.loser)}
+                        <span className="font-extrabold text-[#b07800]">{nameOf(r.winner)}</span> beat {nameOf(r.loser)}
                       </span>
-                      <span className="shrink-0 text-xs text-zinc-500">{ago(r.timestamp)}</span>
+                      <span className="shrink-0 text-xs text-muted">{ago(r.timestamp)}</span>
                     </li>
                   ))}
-                  {records.length === 0 && <li className="text-zinc-500">Nothing settled yet.</li>}
+                  {records.length === 0 && <li className="text-muted">Nothing settled yet.</li>}
                 </ul>
               </div>
             </div>
@@ -170,24 +160,20 @@ export function LiveFeed() {
   );
 }
 
-export function BtcTicker() {
-  const price = useLatestPrice();
-  const market = useMarket();
-  const change = price && market?.open24h ? ((price - market.open24h) / market.open24h) * 100 : null;
+/** Live price of the coin last picked on the trade page, if this player has unlocked it. */
+export function AssetTicker({ townHall }: { townHall: number }) {
+  const [selected] = useSelectedAsset();
+  const asset = isAsset(selected) && unlockedAssets(townHall).includes(selected) ? selected : "BTC";
+  const last = useLatestPrice(asset);
+  const market = useMarket(asset);
+  const change = last && market?.open24h ? ((last - market.open24h) / market.open24h) * 100 : null;
   return (
-    <Link href="/trade" className="chamfer holo pointer-events-auto flex items-center gap-3 px-4 py-1.5" title="Live BTC-USD (Coinbase)">
-      <span className="flex items-center gap-1.5 font-display text-[10px] font-bold tracking-widest text-orange-300">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-orange-400" /> BTC
-      </span>
-      <span className="hud-text font-mono text-sm font-bold sm:text-base">{price ? usd(price) : "..."}</span>
+    <Link href="/trade" className="hud-pill pointer-events-auto flex items-center gap-2.5 py-1 pl-1 pr-4" title={`Live ${asset}-USD (Coinbase)`}>
+      <AssetCoin asset={asset} size={28} />
+      <span className="clash-text font-display text-base">{last ? fmtPrice(last) : "..."}</span>
       {change !== null && (
-        <span className={`font-mono text-xs font-bold ${change >= 0 ? "text-up" : "text-down"}`}>
+        <span className={`clash-text font-display text-sm ${change >= 0 ? "text-[#9ae03f]" : "text-[#ff7552]"}`}>
           {change >= 0 ? "▲" : "▼"} {Math.abs(change).toFixed(2)}%
-        </span>
-      )}
-      {market && (
-        <span className="hidden font-mono text-[10px] text-zinc-400 lg:inline">
-          H {usd(market.high24h, 0)} · L {usd(market.low24h, 0)}
         </span>
       )}
     </Link>
@@ -219,32 +205,30 @@ export function FastModeChip({ address }: { address: string }) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className={`chamfer pointer-events-auto flex items-center gap-1.5 border px-3 py-1 font-display text-[10px] font-bold uppercase tracking-widest backdrop-blur ${
-          session.active ? "border-amber-300/70 bg-amber-300/15 text-amber-200" : "border-zinc-500/50 bg-black/40 text-zinc-300"
-        }`}
+        className={`pointer-events-auto gap-1 px-3 py-1 text-xs ${session.active ? "btn-gold" : "btn-ghost"}`}
       >
-        <Zap size={12} className={session.active ? "fill-amber-300" : ""} /> Fast mode {session.active ? "on" : "off"}
+        <Zap size={13} strokeWidth={3} className={session.active ? "fill-white" : ""} /> Fast mode {session.active ? "on" : "off"}
       </button>
       {open && (
-        <HoloModal title="Fast mode" onClose={() => setOpen(false)}>
-          <div className="space-y-4 text-sm text-zinc-300">
+        <ClashModal title="Fast Mode" onClose={() => setOpen(false)}>
+          <div className="space-y-4 text-sm">
             <p>
               Fast mode creates a temporary game key in this browser and authorizes it on-chain for 7 days. Battles, upgrades and
               gold collection then happen instantly, with no wallet pop-ups.
             </p>
-            <p className="text-zinc-400">
+            <p className="text-muted">
               It can only play MONARCH as you; it can&apos;t move your funds. Enabling sends {SESSION_FUNDING} MON to the key for gas.
             </p>
             {session.active && (
-              <p className="font-mono text-xs text-zinc-400">
+              <p className="font-mono text-xs text-muted">
                 Key {session.account && shortAddr(session.account.address)} · {session.keyBalance.toFixed(4)} MON for gas
                 {!session.canPayGas && (
-                  <span className="text-amber-300"> (low - transactions use your wallet; turn off and on to refill)</span>
+                  <span className="text-[#b07800]"> (low - transactions use your wallet; turn off and on to refill)</span>
                 )}
               </p>
             )}
             {error && (
-              <p className="text-red-400">
+              <p className="text-down">
                 {error}{" "}
                 {error.includes("faucet") && (
                   <a className="underline" href={FAUCET_URL} target="_blank" rel="noreferrer">
@@ -253,11 +237,11 @@ export function FastModeChip({ address }: { address: string }) {
                 )}
               </p>
             )}
-            <button className={session.active ? "btn-ghost w-full" : "btn-gold w-full gap-2"} disabled={busy} onClick={toggle}>
+            <button className={`w-full ${session.active ? "btn-ghost" : "btn-gold"}`} disabled={busy} onClick={toggle}>
               {busy ? "Confirm in wallet..." : session.active ? "Turn off fast mode" : <><Zap size={16} /> Enable fast mode</>}
             </button>
           </div>
-        </HoloModal>
+        </ClashModal>
       )}
     </>
   );
