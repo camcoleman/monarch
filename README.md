@@ -2,7 +2,7 @@
 
 **Trade. Conquer. Rule.** A futuristic, Clash of Clans style base-builder on Monad Testnet, powered by BTC trading battles: hit Attack, out-trade your opponent over 90 seconds of live BTC, and expand your territory.
 
-**Monad Testnet contract:** [`0x6F13287544819FfB03638247C7950d0487fE7898`](https://testnet.monadexplorer.com/address/0x6F13287544819FfB03638247C7950d0487fE7898)
+**Monad Testnet contract:** [`0x6DD4f21c830929f04C6b9c40e2a4ad9818e27f22`](https://testnet.monadexplorer.com/address/0x6DD4f21c830929f04C6b9c40e2a4ad9818e27f22)
 
 ## Layout
 
