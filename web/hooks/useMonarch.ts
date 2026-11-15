@@ -43,7 +43,7 @@ export function usePlayer(address?: string) {
       ? { address: address.toLowerCase(), name, trophies, gold, wins, losses, land, lastCollect: Number(lastCollect) }
       : null;
   }, [query.data, address]);
-  return { player, isLoading: query.isLoading, refetch: query.refetch };
+  return { player, isLoading: query.isLoading, isError: query.isError, refetch: query.refetch };
 }
 
 /** Building levels indexed by building ID (Town Hall, Gold Mine, Barracks, Trophy Hall). */
@@ -67,8 +67,8 @@ export function pendingGold(player: PlayerData | null, extractorLevel: number, n
 
 export function useMe() {
   const { address, isConnected } = useAccount();
-  const { player, isLoading, refetch } = usePlayer(address);
-  return { address: address?.toLowerCase(), isConnected, player, isLoading, refetch };
+  const { player, isLoading, isError, refetch } = usePlayer(address);
+  return { address: address?.toLowerCase(), isConnected, player, isLoading, isError, refetch };
 }
 
 export function useMonBalance(address?: string) {

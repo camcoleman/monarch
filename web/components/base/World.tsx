@@ -5,30 +5,50 @@ import { BUILDINGS, MAX_LAND } from "@monarch/shared";
 import { GoldCoin } from "./ui";
 
 /** World coordinates; the ground art is 16:9. */
-const VIEW_W = 1600;
-const VIEW_H = 900;
+export const VIEW_W = 1600;
+export const VIEW_H = 900;
 /** Isometric 5x5 territory grid laid over the central grass field of the ground art. */
 export const GRID = { cx: 808, cy: 428, tw: 212, th: 140, size: 5 };
 
-type Tile = { i: number; j: number };
+export type Tile = { i: number; j: number };
 
 /** Building tile per building ID: center, left, right, bottom of the grid. */
-const BUILDING_TILES: Tile[] = [
+export const BUILDING_TILES: Tile[] = [
   { i: 2, j: 2 },
   { i: 1, j: 3 },
   { i: 3, j: 1 },
   { i: 3, j: 3 },
 ];
-const BUILDING_WIDTH = [215, 185, 165, 160];
-const CASTLE_WIDTH = 78;
+/**
+ * Sprite placement: `baseY` is the center of the sprite's stone/rock base as a fraction of image height
+ * (measured from the art), `fill` is the base width as a fraction of the tile width.
+ */
+const SPRITE: Record<string, { baseY: number; fill: number }> = {
+  townhall: { baseY: 0.701, fill: 0.86 },
+  goldmine: { baseY: 0.669, fill: 0.8 },
+  barracks: { baseY: 0.698, fill: 0.78 },
+  trophyhall: { baseY: 0.748, fill: 0.72 },
+  castle: { baseY: 0.802, fill: 0.46 },
+};
 
-const tileCenter = ({ i, j }: Tile) => ({
+export const spriteStyle = (key: string, t: Tile) => {
+  const { x, y } = tileCenter(t);
+  const s = SPRITE[key];
+  return {
+    ...pct(x, y),
+    width: `${((GRID.tw * s.fill) / VIEW_W) * 100}%`,
+    transform: `translate(-50%, -${s.baseY * 100}%)`,
+    zIndex: Math.round(y),
+  };
+};
+
+export const tileCenter = ({ i, j }: Tile) => ({
   x: GRID.cx + ((i - j) * GRID.tw) / 2,
   y: GRID.cy + ((i + j - (GRID.size - 1)) * GRID.th) / 2,
 });
 
 /** Claim order: the four building plots, then outward from the center. */
-const TILE_ORDER: Tile[] = (() => {
+export const TILE_ORDER: Tile[] = (() => {
   const key = (t: Tile) => `${t.i},${t.j}`;
   const taken = new Set(BUILDING_TILES.map(key));
   const mid = (GRID.size - 1) / 2;
@@ -44,9 +64,9 @@ const TILE_ORDER: Tile[] = (() => {
   return [...BUILDING_TILES, ...rest];
 })();
 
-const pct = (x: number, y: number) => ({ left: `${(x / VIEW_W) * 100}%`, top: `${(y / VIEW_H) * 100}%` });
+export const pct = (x: number, y: number) => ({ left: `${(x / VIEW_W) * 100}%`, top: `${(y / VIEW_H) * 100}%` });
 
-function tilePoints(t: Tile, inset = 0) {
+export function tilePoints(t: Tile, inset = 0) {
   const { x, y } = tileCenter(t);
   const w = GRID.tw / 2 - inset;
   const h = GRID.th / 2 - inset * (GRID.th / GRID.tw);
@@ -154,6 +174,37 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
               />
             );
           })}
+          <defs>
+            <radialGradient id="contact-shadow">
+              <stop offset="0%" stopColor="#000" stopOpacity="0.5" />
+              <stop offset="70%" stopColor="#000" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="#000" stopOpacity="0" />
+            </radialGradient>
+          </defs>
+          {[...BUILDING_TILES, ...outposts].map((t, idx) => {
+            const { x, y } = tileCenter(t);
+            const isBuilding = idx < BUILDING_TILES.length;
+            const isSelected = isBuilding && selected === idx;
+            return (
+              <g key={`f-${t.i}-${t.j}`}>
+                <polygon
+                  points={tilePoints(t, isBuilding ? 6 : 30)}
+                  fill="#7a6332"
+                  fillOpacity={0.7}
+                  stroke={isSelected ? "#fff7c2" : "#3d3214"}
+                  strokeOpacity={isSelected ? 1 : 0.45}
+                  strokeWidth={isSelected ? 4 : 2}
+                />
+                <ellipse
+                  cx={x}
+                  cy={y + GRID.th * 0.04}
+                  rx={GRID.tw * (isBuilding ? 0.42 : 0.2)}
+                  ry={GRID.th * (isBuilding ? 0.36 : 0.17)}
+                  fill="url(#contact-shadow)"
+                />
+              </g>
+            );
+          })}
           {nextTile && !readOnly && (
             <text
               x={tileCenter(nextTile).x}
@@ -167,30 +218,25 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
           )}
         </svg>
 
-        {outposts.map((t) => {
-          const { x, y } = tileCenter(t);
-          return (
-            <img
-              key={`o-${t.i}-${t.j}`}
-              src="/village/castle.png"
-              alt=""
-              draggable={false}
-              className="base-sprite pointer-events-none absolute drop-shadow-[0_8px_6px_rgba(0,0,0,0.45)]"
-              style={{ ...pct(x, y + GRID.th * 0.28), width: `${(CASTLE_WIDTH / VIEW_W) * 100}%`, zIndex: Math.round(y) }}
-            />
-          );
-        })}
+        {outposts.map((t) => (
+          <img
+            key={`o-${t.i}-${t.j}`}
+            src="/village/castle.png"
+            alt=""
+            draggable={false}
+            className="pointer-events-none absolute drop-shadow-[0_2px_1px_rgba(0,0,0,0.35)]"
+            style={spriteStyle("castle", t)}
+          />
+        ))}
 
         {BUILDINGS.map((b) => {
-          const { x, y } = tileCenter(BUILDING_TILES[b.id]);
           const level = levels[b.id] ?? 1;
-          const width = BUILDING_WIDTH[b.id] * (1 + 0.05 * (level - 1));
           const isSelected = selected === b.id;
           return (
             <button
               key={b.id}
-              className="base-sprite group absolute focus:outline-none"
-              style={{ ...pct(x, y + GRID.th * 0.3), width: `${(width / VIEW_W) * 100}%`, zIndex: Math.round(y) }}
+              className="group absolute focus:outline-none"
+              style={spriteStyle(b.key, BUILDING_TILES[b.id])}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(isSelected ? null : b.id);
@@ -201,10 +247,10 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
                 src={`/village/${b.key}.png`}
                 alt=""
                 draggable={false}
-                className={`w-full transition duration-200 group-hover:-translate-y-1 ${
+                className={`w-full transition duration-200 group-hover:brightness-110 ${
                   isSelected
-                    ? "brightness-110 drop-shadow-[0_0_10px_rgba(255,247,194,1)]"
-                    : "drop-shadow-[0_10px_8px_rgba(0,0,0,0.45)]"
+                    ? "brightness-115 drop-shadow-[0_0_8px_rgba(255,247,194,0.95)]"
+                    : "drop-shadow-[0_2px_1px_rgba(0,0,0,0.35)]"
                 }`}
               />
               <span className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-md border-2 border-[#1d1206] bg-[linear-gradient(180deg,#b07c45,#7a4f25)] px-1.5 py-px font-display text-[11px] text-white shadow-[0_2px_0_#1d1206] sm:text-xs">
