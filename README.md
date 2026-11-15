@@ -1,6 +1,6 @@
 # MONARCH
 
-**Trade. Conquer. Rule.** A competitive BTC paper-trading game on Monad Testnet: win 90-second 1v1 trading battles to capture US states.
+**Trade. Conquer. Rule.** A futuristic, Clash of Clans style base-builder on Monad Testnet, powered by BTC trading battles: hit Attack, out-trade your opponent over 90 seconds of live BTC, and expand your territory.
 
 **Monad Testnet contract:** [`0x6F13287544819FfB03638247C7950d0487fE7898`](https://testnet.monadexplorer.com/address/0x6F13287544819FfB03638247C7950d0487fE7898)
 
@@ -8,10 +8,10 @@
 
 | Folder | What it is |
 | --- | --- |
-| `contracts/` | Foundry project. `Monarch.sol` records players, battle settlements, trophies, gold, and state ownership. |
-| `server/` | Node referee. Streams BTC-USD from Coinbase, runs battles over Socket.IO, settles results on-chain with viem. |
-| `web/` | Next.js app: wallet + registration, paper trading, conquest map, battle screen, leaderboard. |
-| `shared/` | ABI, state list, game constants, and Socket.IO event types used by both `server` and `web`. |
+| `contracts/` | Foundry project. `Monarch.sol` records players, bases, territory, battle settlements and history, and session keys. |
+| `server/` | Node referee. Streams BTC-USD from Coinbase, runs matchmaking and battles over Socket.IO, settles results on-chain with viem. |
+| `web/` | Next.js app: full-screen base with HUD, matchmaking, battle screen, paper trading, rankings. |
+| `shared/` | ABI, game constants, and Socket.IO event types used by both `server` and `web`. |
 
 ```
 Coinbase WS -> server (price feed -> battle engine -> settler) -> Monarch.sol
@@ -72,47 +72,49 @@ Useful server knobs:
 
 - `PRICE_MODE=mock` uses a volatile random walk instead of Coinbase (offline, or when BTC is flat during a demo).
 - `ROUND_SECONDS` / `PICK_SECONDS` shorten battles for testing.
-- `pnpm --filter ./server simulate [stateId]` plays a full scripted, signed battle between the wallets in `SIM_KEY_A` / `SIM_KEY_B` (defaults: Anvil accounts 1 and 2). Both must be registered.
+- `pnpm --filter ./server simulate` matchmakes and plays a full scripted, signed battle between the wallets in `SIM_KEY_A` / `SIM_KEY_B` (defaults: Anvil accounts 1 and 2). Both must be registered.
 
 Leaving `CONTRACT_ADDRESS` empty runs the server with no chain: battles still work but nothing is settled.
 
 ## Game rules
 
 - Paper trading: $10,000 virtual balance (stored in the browser), long/short BTC up to 10x, liquidation at -100% of margin.
-- Battles: both players get the same entry price, pick long/short and 1-5x leverage within 15 seconds (default long 1x), then the 90-second round runs on live prices. Highest return wins.
-- Ties go to the defending ruler, or the challenger who created the battle if the state was neutral.
-- An owned state can only change hands in a battle that includes its ruler. One battle per state at a time; unaccepted challenges expire after 5 minutes.
-- A win is worth +25 trophies, +100 gold (more with a Gold Mine), and the state, unless the winner was the defender, who keeps it.
+- Matchmaking: **Attack** queues you; the next commander to hit Attack is paired with you. You can also send an open invite link, or attack a specific player from their scouted base (`/kingdom/<address>`). Unaccepted invites expire after 5 minutes.
+- Battles: both players get the same entry price, pick long/short and leverage within 15 seconds (default long 1x), then the 90-second round runs on live prices. Highest return wins; ties go to the player who accepted.
+- Winner: +25 trophies (more with a Trophy Vault), +100 gold (more with a Gold Extractor), 10% of the loser's gold as loot, and +1 territory plot (max 25).
+- Loser: -10 trophies and -1 territory plot (never below the starting 4).
+- Leagues by trophies: Bronze 0, Silver 100, Gold 250, Crystal 500, Titan 1000, Monarch 2000.
 
-State IDs: 0 CA, 1 OR, 2 WA, 3 TX, 4 FL, 5 NY, 6 CO, 7 IL.
+### Base
 
-### Village
-
-Registered players land on their village: an isometric base showing their buildings and one castle per conquered state. Players start with 200 gold and every building at level 1. Upgrades are on-chain (`upgrade(building)`) and cost `baseCost x nextLevel` gold, up to level 5. No building can be higher level than the Town Hall.
+Registered players land on a full-screen base: a 5x5 territory grid with their buildings, a Clash-style HUD (profile and league top-left, resources top-right, Attack bottom-left, Shop bottom-right), a live battle feed on the left edge, and a live BTC ticker. Players start with 200 gold, 4 plots, and every building at level 1. Upgrades are on-chain and cost `baseCost x nextLevel` gold, up to level 5. No building can be higher level than the Command Center.
 
 | Building | Base cost | Effect |
 | --- | --- | --- |
-| Town Hall | 100 | Caps every other building's level |
-| Gold Mine | 60 | +20 gold per win for each level above 1 |
-| Barracks | 50 | Cosmetic (army size) |
-| Trophy Hall | 80 | Cosmetic (prestige) |
+| Command Center | 100 | Caps every other building's level |
+| Gold Extractor | 60 | Produces 2 gold/min per level (tap to collect on-chain, cap 150 per level); +20 gold per win per level above 1 |
+| Mech Bay | 50 | Max battle leverage = level + 1 (2x to 6x) |
+| Trophy Vault | 80 | +5 trophies per win per level above 1 |
 
-Anyone's village can be scouted read-only at `/kingdom/<address>` (linked from the leaderboard).
+The battle log and the live feed's on-chain results are read straight from the contract (`getHistory`, `getRecentBattles`).
 
-### Signed actions
+### Signed actions and Fast mode
 
-Declaring war, accepting a battle, and locking in a pick each require a wallet signature (`signMessage`). The referee verifies it with viem before acting, so nobody can play as an address they don't control. War declarations include a timestamp and expire after 5 minutes.
+Finding a match, issuing a challenge, accepting, and locking in a pick each require a signature, which the referee verifies before acting, so nobody can play as an address they don't control.
+
+**Fast mode** removes the wallet pop-ups: the player approves one `startSession(key, expiry)` transaction, which authorizes a browser-held key for 7 days and forwards 0.05 MON to it for gas. That key signs battle actions and sends `upgrade` / `collect` itself. The contract resolves it to the player via `playerOf(key)`, and the referee accepts signatures from the player or their live session key. A session key can't register, can't move the player's funds, and can be revoked with `endSession()`.
 
 ## Demo script
 
-1. Two browsers, two wallets. Register both; each lands on their village.
-2. Upgrade the Town Hall from the village to show an on-chain upgrade, then a quick paper trade on **Trade**.
-3. On **Conquest**, select California and declare war. Send the battle link to the second browser.
-4. Accept, both pick a side and leverage, watch the 90-second round.
+1. Two browsers, two wallets. Register both; each lands on their base.
+2. Turn on Fast mode in one browser to show pop-up free play. Collect gold from the Extractor and upgrade the Command Center.
+3. Hit **Attack** in both browsers - matchmaking pairs them.
+4. Both pick a side and leverage (Mech Bay caps it), watch the 90-second round on live BTC.
 5. Open the settlement transaction from the result screen.
-6. Back on the map, California is now the winner's color; the leaderboard updates.
+6. Back on the base: a new territory plot lights up, the battle log shows the raid and loot, the rankings update.
 
 ## Known MVP limits
 
-- The referee is trusted: it decides prices and results, and game state lives in its memory.
+- The referee is trusted: it decides prices and results, and battle state lives in its memory.
 - Join and pick signatures have no timestamp, so they are only bound to one battle id (which is single-use).
+- Session keys live in browser `localStorage`; clearing it just means re-enabling Fast mode.

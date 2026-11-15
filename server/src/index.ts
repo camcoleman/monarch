@@ -43,13 +43,22 @@ async function respond<T extends object>(ack: unknown, fn: () => Ack<T> | Promis
 
 io.on("connection", (socket) => {
   socket.emit("price:history", feed.history);
-  socket.emit("battles:open", battles.openSummaries());
+  if (feed.market) socket.emit("market", feed.market);
+  socket.emit("battles:live", battles.liveSummaries());
+  socket.emit("match:queue", { searching: battles.queueSize() });
 
-  socket.on("battle:create", (p, ack) => respond(ack, () => battles.create(p)));
+  socket.on("match:find", (p, ack) => respond(ack, () => battles.findMatch(socket, p)));
+  socket.on("match:cancel", (p, ack) => respond(ack, () => battles.cancelMatch(p.address)));
+  socket.on("battle:challenge", (p, ack) => respond(ack, () => battles.challenge(p)));
   socket.on("battle:watch", (p, ack) => respond(ack, () => battles.watch(socket, p.battleId)));
   socket.on("battle:join", (p, ack) => respond(ack, () => battles.join(p)));
   socket.on("battle:pick", (p, ack) => respond(ack, () => battles.pick(p)));
+  socket.on("disconnect", () => battles.dropSocket(socket.id));
 });
+
+setInterval(() => {
+  if (feed.market) io.emit("market", feed.market);
+}, 5_000);
 
 httpServer.listen(config.port, () => {
   console.log(`[server] MONARCH referee listening on :${config.port}`);

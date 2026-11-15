@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { PriceTick } from "@monarch/shared";
+import type { MarketStats, PriceTick } from "@monarch/shared";
 
 const COINBASE_WS = "wss://ws-feed.exchange.coinbase.com";
 const TICK_MS = 500;
@@ -16,6 +16,7 @@ export class PriceFeed extends EventEmitter<{ tick: [PriceTick] }> {
   private price: number | null = null;
   private lastMessageAt = 0;
   readonly history: PriceTick[] = [];
+  market: MarketStats | null = null;
 
   constructor(private readonly mode: "live" | "mock") {
     super();
@@ -38,6 +39,16 @@ export class PriceFeed extends EventEmitter<{ tick: [PriceTick] }> {
         this.price *= 1 + gaussian() * MOCK_VOLATILITY;
       }
       if (this.price === null) return;
+      if (this.mode === "mock") {
+        const m = (this.market ??= {
+          open24h: MOCK_START_PRICE,
+          high24h: this.price,
+          low24h: this.price,
+          volume24h: 12_345,
+        });
+        m.high24h = Math.max(m.high24h, this.price);
+        m.low24h = Math.min(m.low24h, this.price);
+      }
       const tick = { p: Math.round(this.price * 100) / 100, t: Date.now() };
       this.history.push(tick);
       if (this.history.length > HISTORY_SIZE) this.history.shift();
@@ -65,7 +76,15 @@ export class PriceFeed extends EventEmitter<{ tick: [PriceTick] }> {
       this.lastMessageAt = Date.now();
       try {
         const msg = JSON.parse(String(event.data));
-        if (msg.type === "ticker" && msg.price) this.price = Number(msg.price);
+        if (msg.type === "ticker" && msg.price) {
+          this.price = Number(msg.price);
+          this.market = {
+            open24h: Number(msg.open_24h),
+            high24h: Number(msg.high_24h),
+            low24h: Number(msg.low_24h),
+            volume24h: Number(msg.volume_24h),
+          };
+        }
       } catch {
         // ignore malformed frames
       }

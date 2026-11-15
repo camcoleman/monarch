@@ -3,18 +3,17 @@ import {
   createWalletClient,
   getAddress,
   http,
-  zeroAddress,
+  recoverMessageAddress,
   type Hex,
   type PublicClient,
   type WalletClient,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { monadTestnet, monarchAbi } from "@monarch/shared";
+import { ARENA_MAX_LEVERAGE, monadTestnet, monarchAbi } from "@monarch/shared";
 import type { Config } from "./config";
 
 export interface SettleArgs {
   onchainId: Hex;
-  stateId: number;
   winner: string;
   loser: string;
   winnerBps: number;
@@ -51,21 +50,21 @@ export class Chain {
     return Boolean(this.publicClient);
   }
 
-  async getStateOwner(stateId: number): Promise<string | null> {
-    if (!this.publicClient || !this.address) return null;
-    const owner = await this.publicClient.readContract({
+  /** Battle leverage cap from the player's Mech Bay. */
+  async getMaxLeverage(player: string): Promise<number> {
+    if (!this.publicClient || !this.address) return ARENA_MAX_LEVERAGE;
+    return this.publicClient.readContract({
       address: this.address,
       abi: monarchAbi,
-      functionName: "stateOwner",
-      args: [stateId],
+      functionName: "maxLeverage",
+      args: [getAddress(player)],
     });
-    return owner === zeroAddress ? null : owner.toLowerCase();
   }
 
   /** On-chain name, null if unregistered, undefined when running without a contract. */
   async getPlayerName(player: string): Promise<string | null | undefined> {
     if (!this.publicClient || !this.address) return undefined;
-    const [name, , , , , , exists] = await this.publicClient.readContract({
+    const [name, , , , , , , exists] = await this.publicClient.readContract({
       address: this.address,
       abi: monarchAbi,
       functionName: "players",
@@ -74,19 +73,27 @@ export class Chain {
     return exists ? name : null;
   }
 
-  /** True if `signature` is `player`'s signature of `message`. Always true when running without a chain. */
+  /**
+   * True if `message` was signed by `player` or by a live session key acting for `player`.
+   * Always true when running without a chain.
+   */
   async verify(player: string, message: string, signature: string): Promise<boolean> {
-    if (!this.publicClient) return true;
+    if (!this.publicClient || !this.address) return true;
     if (!/^0x[0-9a-fA-F]+$/.test(signature)) return false;
+    let signer: string;
     try {
-      return await this.publicClient.verifyMessage({
-        address: getAddress(player),
-        message,
-        signature: signature as Hex,
-      });
+      signer = await recoverMessageAddress({ message, signature: signature as Hex });
     } catch {
       return false;
     }
+    if (signer.toLowerCase() === player.toLowerCase()) return true;
+    const actsFor = await this.publicClient.readContract({
+      address: this.address,
+      abi: monarchAbi,
+      functionName: "playerOf",
+      args: [getAddress(signer)],
+    });
+    return actsFor.toLowerCase() === player.toLowerCase();
   }
 
   /** Serialized so concurrent battles never race on the referee nonce. Retries once. */
@@ -110,7 +117,7 @@ export class Chain {
       address: this.address,
       abi: monarchAbi,
       functionName: "settleBattle",
-      args: [a.onchainId, a.stateId, getAddress(a.winner), getAddress(a.loser), a.winnerBps, a.loserBps],
+      args: [a.onchainId, getAddress(a.winner), getAddress(a.loser), a.winnerBps, a.loserBps],
       account: this.account,
       chain: monadTestnet,
     });

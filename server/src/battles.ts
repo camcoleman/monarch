@@ -4,15 +4,15 @@ import { isAddress, keccak256, toHex, type Hex } from "viem";
 import {
   ARENA_MAX_LEVERAGE,
   SIGNATURE_TTL_MS,
-  STATES,
   computeReturnPct,
   signedMessage,
   type Ack,
   type BattlePhase,
   type BattleSummary,
   type BattleView,
+  type ChallengePayload,
   type ClientToServerEvents,
-  type CreateBattlePayload,
+  type FindMatchPayload,
   type JoinBattlePayload,
   type Pick,
   type PickPayload,
@@ -27,24 +27,28 @@ import type { PriceFeed } from "./priceFeed";
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
-const BAD_SIGNATURE = "Wallet signature didn't match this address";
+const BAD_SIGNATURE = "Signature didn't match this player";
+const NOT_REGISTERED = "Register your base on-chain first";
 const ENDED_TTL_MS = 30 * 60_000;
+const FEED_ENDED_MS = 3 * 60_000;
 const LOBBY_TTL_MS = 5 * 60_000;
+const FEED_THROTTLE_MS = 2_000;
 
 interface Battle {
   id: string;
   onchainId: Hex;
-  stateId: number;
+  mode: BattleView["mode"];
   phase: BattlePhase;
   creator: PlayerRef;
   opponent: PlayerRef | null;
-  defender: string | null;
   requiredOpponent: string | null;
+  maxLeverage: Record<string, number>;
   picks: Record<string, Pick | null>;
   entryPrice: number | null;
   lastPrice: number | null;
   pickEndsAt: number | null;
   endsAt: number | null;
+  endedAt: number | null;
   returns: Record<string, number>;
   winner: string | null;
   txHash: string | null;
@@ -52,16 +56,23 @@ interface Battle {
   timer?: NodeJS.Timeout;
 }
 
+interface QueueEntry {
+  player: PlayerRef;
+  socketId: string;
+}
+
 const room = (id: string) => `battle:${id}`;
 const fail = (error: string) => ({ ok: false as const, error });
+const fresh = (timestamp: number) => Number.isFinite(timestamp) && Math.abs(Date.now() - timestamp) <= SIGNATURE_TTL_MS;
 
-function player(address: string, name: string): PlayerRef {
-  const clean = name.trim().slice(0, 24);
-  return { address: address.toLowerCase(), name: clean || `${address.slice(0, 6)}...${address.slice(-4)}` };
+function playerRef(address: string, name: string | undefined): PlayerRef {
+  return { address, name: name?.trim().slice(0, 24) || `${address.slice(0, 6)}...${address.slice(-4)}` };
 }
 
 export class BattleManager {
   private readonly battles = new Map<string, Battle>();
+  private readonly queue = new Map<string, QueueEntry>();
+  private lastFeedAt = 0;
 
   constructor(
     private readonly io: IO,
@@ -70,54 +81,76 @@ export class BattleManager {
     private readonly config: Config
   ) {}
 
-  async create(p: CreateBattlePayload): Promise<Ack<{ battleId: string }>> {
-    if (!STATES[p.stateId]) return fail("Unknown state");
-    if (!isAddress(p.address)) return fail("Invalid address");
-    const address = p.address.toLowerCase();
-    if (!Number.isFinite(p.timestamp) || Math.abs(Date.now() - p.timestamp) > SIGNATURE_TTL_MS) {
-      return fail("Signature expired - try again");
-    }
-    if (!(await this.chain.verify(address, signedMessage.create(p.stateId, p.timestamp), p.signature))) {
-      return fail(BAD_SIGNATURE);
+  /** Joins the matchmaking queue, or pairs with whoever is waiting. Returns the battle id once paired. */
+  async findMatch(socket: ClientSocket, p: FindMatchPayload): Promise<Ack<{ battleId: string | null }>> {
+    const auth = await this.authenticate(p.address, signedMessage.findMatch(p.timestamp), p.signature, p.timestamp);
+    if ("error" in auth) return fail(auth.error);
+    const me = auth.player;
+
+    const current = this.activeBattleOf(me.address);
+    if (current) return { ok: true, battleId: current.id };
+
+    const rival = [...this.queue.values()].find((q) => q.player.address !== me.address);
+    if (!rival) {
+      this.queue.set(me.address, { player: me, socketId: socket.id });
+      console.log(`[match] ${me.name} searching (${this.queue.size} in queue)`);
+      this.broadcastQueue();
+      return { ok: true, battleId: null };
     }
 
-    const active = this.activeBattleFor(p.stateId);
-    if (active?.phase === "lobby" && active.creator.address === address) return { ok: true, battleId: active.id };
-    if (active) return fail(`${STATES[p.stateId].name} is already under siege`);
-    const name = await this.chain.getPlayerName(address);
-    if (name === null) return fail("Register your kingdom on-chain first");
+    this.queue.delete(rival.player.address);
+    this.queue.delete(me.address);
+    const battle = this.newBattle("match", rival.player, null);
+    battle.opponent = me;
+    await this.startPicking(battle);
+    this.io.to(rival.socketId).emit("match:found", { battleId: battle.id });
+    console.log(`[match] paired ${rival.player.name} vs ${me.name} in ${battle.id}`);
+    this.broadcastQueue();
+    return { ok: true, battleId: battle.id };
+  }
 
-    const owner = await this.chain.getStateOwner(p.stateId);
-    const id = randomBytes(5).toString("hex");
-    const battle: Battle = {
-      id,
-      onchainId: keccak256(toHex(id)),
-      stateId: p.stateId,
-      phase: "lobby",
-      creator: player(address, name ?? p.name),
-      opponent: null,
-      defender: owner,
-      requiredOpponent: owner && owner !== address ? owner : null,
-      picks: { [address]: null },
-      entryPrice: null,
-      lastPrice: null,
-      pickEndsAt: null,
-      endsAt: null,
-      returns: {},
-      winner: null,
-      txHash: null,
-      settleError: null,
-    };
-    this.battles.set(id, battle);
+  cancelMatch(address: string): Ack {
+    if (this.queue.delete(address.toLowerCase())) this.broadcastQueue();
+    return { ok: true };
+  }
+
+  dropSocket(socketId: string) {
+    let changed = false;
+    for (const [addr, q] of this.queue) {
+      if (q.socketId === socketId) changed = this.queue.delete(addr) || changed;
+    }
+    if (changed) this.broadcastQueue();
+  }
+
+  /** Opens a lobby that `target` (or anyone, if null) can accept via the invite link. */
+  async challenge(p: ChallengePayload): Promise<Ack<{ battleId: string }>> {
+    const auth = await this.authenticate(p.address, signedMessage.challenge(p.target, p.timestamp), p.signature, p.timestamp);
+    if ("error" in auth) return fail(auth.error);
+    const me = auth.player;
+
+    let target: string | null = null;
+    if (p.target) {
+      if (!isAddress(p.target)) return fail("Invalid opponent address");
+      target = p.target.toLowerCase();
+      if (target === me.address) return fail("You can't battle yourself");
+      if ((await this.chain.getPlayerName(target)) === null) return fail("That player hasn't registered a base");
+    }
+
+    const current = this.activeBattleOf(me.address);
+    if (current?.phase === "lobby" && current.requiredOpponent === target) return { ok: true, battleId: current.id };
+    if (current) return fail("Finish your current battle first");
+    this.queue.delete(me.address);
+
+    const battle = this.newBattle("challenge", me, target);
     battle.timer = setTimeout(() => {
       if (battle.phase !== "lobby") return;
-      this.battles.delete(id);
-      console.log(`[battle ${id}] lobby expired`);
-      this.broadcastOpen();
+      this.battles.delete(battle.id);
+      console.log(`[battle ${battle.id}] lobby expired`);
+      this.broadcastLive();
     }, LOBBY_TTL_MS);
-    console.log(`[battle ${id}] created for ${STATES[p.stateId].code} by ${battle.creator.name}`);
-    this.broadcastOpen();
-    return { ok: true, battleId: id };
+    console.log(`[battle ${battle.id}] challenge by ${me.name}${target ? ` to ${target}` : ""}`);
+    this.broadcastLive();
+    return { ok: true, battleId: battle.id };
   }
 
   watch(socket: ClientSocket, battleId: string): Ack<{ battle: BattleView }> {
@@ -134,29 +167,21 @@ export class BattleManager {
     if (!isAddress(p.address)) return fail("Invalid address");
     const address = p.address.toLowerCase();
     if (address === battle.creator.address) return fail("You can't battle yourself");
-    if (!(await this.chain.verify(address, signedMessage.join(battle.id), p.signature))) return fail(BAD_SIGNATURE);
     if (battle.requiredOpponent && battle.requiredOpponent !== address) {
-      return fail("Only the current ruler of this state can accept this challenge");
+      return fail("This challenge was sent to someone else");
     }
+    if (!(await this.chain.verify(address, signedMessage.join(battle.id), p.signature))) return fail(BAD_SIGNATURE);
     const name = await this.chain.getPlayerName(address);
-    if (name === null) return fail("Register your kingdom on-chain first");
-
-    const owner = await this.chain.getStateOwner(battle.stateId);
-    if (owner && owner !== address && owner !== battle.creator.address) {
-      return fail("The state changed hands; its new ruler must be in the battle");
-    }
+    if (name === null) return fail(NOT_REGISTERED);
     if (battle.phase !== "lobby") return fail("Battle already started");
+    const other = this.activeBattleOf(address);
+    if (other && other !== battle) return fail("Finish your current battle first");
 
     clearTimeout(battle.timer);
-    battle.defender = owner;
-    battle.opponent = player(address, name ?? p.name);
-    battle.picks[address] = null;
-    battle.phase = "picking";
-    battle.pickEndsAt = Date.now() + this.config.pickSeconds * 1000;
-    battle.timer = setTimeout(() => this.startLive(battle), this.config.pickSeconds * 1000);
+    this.queue.delete(address);
+    battle.opponent = playerRef(address, name);
+    await this.startPicking(battle);
     console.log(`[battle ${battle.id}] ${battle.opponent.name} accepted`);
-    this.emitState(battle);
-    this.broadcastOpen();
     return { ok: true };
   }
 
@@ -167,8 +192,9 @@ export class BattleManager {
     const address = p.address.toLowerCase();
     if (!(address in battle.picks)) return fail("You are not in this battle");
     if (p.side !== "long" && p.side !== "short") return fail("Invalid side");
-    if (!Number.isInteger(p.leverage) || p.leverage < 1 || p.leverage > ARENA_MAX_LEVERAGE) {
-      return fail(`Leverage must be 1-${ARENA_MAX_LEVERAGE}x`);
+    const cap = battle.maxLeverage[address] ?? 1;
+    if (!Number.isInteger(p.leverage) || p.leverage < 1 || p.leverage > cap) {
+      return fail(`Your Mech Bay allows 1-${cap}x leverage`);
     }
     if (!(await this.chain.verify(address, signedMessage.pick(battle.id, p.side, p.leverage), p.signature))) {
       return fail(BAD_SIGNATURE);
@@ -186,8 +212,10 @@ export class BattleManager {
   }
 
   onPrice(tick: PriceTick) {
+    let anyLive = false;
     for (const battle of this.battles.values()) {
       if (battle.phase !== "live") continue;
+      anyLive = true;
       this.updateReturns(battle, tick.p);
       this.io.to(room(battle.id)).emit("battle:tick", {
         battleId: battle.id,
@@ -196,19 +224,86 @@ export class BattleManager {
         returns: battle.returns,
       });
     }
+    if (anyLive && Date.now() - this.lastFeedAt > FEED_THROTTLE_MS) this.broadcastLive();
   }
 
-  openSummaries(): BattleSummary[] {
+  liveSummaries(): BattleSummary[] {
+    const now = Date.now();
     return [...this.battles.values()]
-      .filter((b) => b.phase !== "ended")
+      .filter((b) => b.phase !== "ended" || (b.endedAt !== null && now - b.endedAt < FEED_ENDED_MS))
       .map((b) => ({
         id: b.id,
-        stateId: b.stateId,
+        mode: b.mode,
         phase: b.phase,
         creator: b.creator,
         opponent: b.opponent,
         requiredOpponent: b.requiredOpponent,
+        endsAt: b.endsAt,
+        returns: b.returns,
+        winner: b.winner,
       }));
+  }
+
+  queueSize() {
+    return this.queue.size;
+  }
+
+  private async authenticate(
+    rawAddress: string,
+    message: string,
+    signature: string,
+    timestamp: number
+  ): Promise<{ player: PlayerRef } | { error: string }> {
+    if (!isAddress(rawAddress)) return { error: "Invalid address" };
+    if (!fresh(timestamp)) return { error: "Signature expired - try again" };
+    const address = rawAddress.toLowerCase();
+    if (!(await this.chain.verify(address, message, signature))) return { error: BAD_SIGNATURE };
+    const name = await this.chain.getPlayerName(address);
+    if (name === null) return { error: NOT_REGISTERED };
+    return { player: playerRef(address, name) };
+  }
+
+  private newBattle(mode: Battle["mode"], creator: PlayerRef, requiredOpponent: string | null): Battle {
+    const id = randomBytes(5).toString("hex");
+    const battle: Battle = {
+      id,
+      onchainId: keccak256(toHex(id)),
+      mode,
+      phase: "lobby",
+      creator,
+      opponent: null,
+      requiredOpponent,
+      maxLeverage: {},
+      picks: { [creator.address]: null },
+      entryPrice: null,
+      lastPrice: null,
+      pickEndsAt: null,
+      endsAt: null,
+      endedAt: null,
+      returns: {},
+      winner: null,
+      txHash: null,
+      settleError: null,
+    };
+    this.battles.set(id, battle);
+    return battle;
+  }
+
+  private async startPicking(battle: Battle) {
+    if (!battle.opponent) return;
+    const players = [battle.creator.address, battle.opponent.address];
+    const caps = await Promise.all(
+      players.map((a) => this.chain.getMaxLeverage(a).catch(() => 1))
+    );
+    players.forEach((a, i) => {
+      battle.maxLeverage[a] = Math.min(ARENA_MAX_LEVERAGE, caps[i]);
+      battle.picks[a] = null;
+    });
+    battle.phase = "picking";
+    battle.pickEndsAt = Date.now() + this.config.pickSeconds * 1000;
+    battle.timer = setTimeout(() => this.startLive(battle), this.config.pickSeconds * 1000);
+    this.emitState(battle);
+    this.broadcastLive();
   }
 
   private startLive(battle: Battle) {
@@ -229,7 +324,7 @@ export class BattleManager {
     battle.timer = setTimeout(() => this.finish(battle), this.config.roundSeconds * 1000);
     console.log(`[battle ${battle.id}] live at $${latest.p}`);
     this.emitState(battle);
-    this.broadcastOpen();
+    this.broadcastLive();
   }
 
   private finish(battle: Battle) {
@@ -241,22 +336,21 @@ export class BattleManager {
     const b = battle.opponent.address;
     const ra = battle.returns[a] ?? 0;
     const rb = battle.returns[b] ?? 0;
-    let winner: string;
-    if (ra !== rb) winner = ra > rb ? a : b;
-    else winner = battle.defender === a || battle.defender === b ? battle.defender : a;
+    // Ties go to whoever accepted the battle: the challenger set the terms.
+    const winner = ra === rb ? b : ra > rb ? a : b;
     const loser = winner === a ? b : a;
 
     battle.phase = "ended";
+    battle.endedAt = Date.now();
     battle.winner = winner;
     console.log(`[battle ${battle.id}] winner ${winner} (${ra.toFixed(3)}% vs ${rb.toFixed(3)}%)`);
     this.emitState(battle);
-    this.broadcastOpen();
+    this.broadcastLive();
     setTimeout(() => this.battles.delete(battle.id), ENDED_TTL_MS);
 
     this.chain
       .settle({
         onchainId: battle.onchainId,
-        stateId: battle.stateId,
         winner,
         loser,
         winnerBps: Math.round((battle.returns[winner] ?? 0) * 100),
@@ -282,8 +376,10 @@ export class BattleManager {
     }
   }
 
-  private activeBattleFor(stateId: number) {
-    return [...this.battles.values()].find((b) => b.stateId === stateId && b.phase !== "ended");
+  private activeBattleOf(address: string) {
+    return [...this.battles.values()].find(
+      (b) => b.phase !== "ended" && (b.creator.address === address || b.opponent?.address === address)
+    );
   }
 
   private view(b: Battle): BattleView {
@@ -291,12 +387,12 @@ export class BattleManager {
     return {
       id: b.id,
       onchainId: b.onchainId,
-      stateId: b.stateId,
+      mode: b.mode,
       phase: b.phase,
       creator: b.creator,
       opponent: b.opponent,
-      defender: b.defender,
       requiredOpponent: b.requiredOpponent,
+      maxLeverage: b.maxLeverage,
       picked: Object.fromEntries(Object.entries(b.picks).map(([k, v]) => [k, Boolean(v)])),
       picks: revealed ? (b.picks as Record<string, Pick>) : null,
       entryPrice: b.entryPrice,
@@ -314,7 +410,12 @@ export class BattleManager {
     this.io.to(room(battle.id)).emit("battle:state", this.view(battle));
   }
 
-  private broadcastOpen() {
-    this.io.emit("battles:open", this.openSummaries());
+  private broadcastLive() {
+    this.lastFeedAt = Date.now();
+    this.io.emit("battles:live", this.liveSummaries());
+  }
+
+  private broadcastQueue() {
+    this.io.emit("match:queue", { searching: this.queue.size });
   }
 }

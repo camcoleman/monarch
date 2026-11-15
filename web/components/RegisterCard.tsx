@@ -28,8 +28,7 @@ export function RegisterCard({ compact = false }: { compact?: boolean }) {
         <p className="text-sm text-zinc-400">Welcome back,</p>
         <p className="font-display text-2xl text-gold">{player.name}</p>
         <p className="mt-2 text-sm text-zinc-400">
-          🏆 {player.trophies} trophies · 🪙 {player.gold} gold · 🏰 {player.statesOwned} states · {player.wins}W/
-          {player.losses}L
+          🏆 {player.trophies} trophies · {player.gold} gold · {player.land} land · {player.wins}W/{player.losses}L
         </p>
       </div>
     );
@@ -37,10 +36,10 @@ export function RegisterCard({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="panel space-y-3 p-5">
-      <h3 className="font-display text-xl text-gold">Found your kingdom</h3>
+      <h3 className="font-display text-xl text-gold">Claim your base</h3>
       {!isConnected ? (
         <>
-          <p className="text-sm text-zinc-400">Connect a wallet on Monad Testnet to start conquering.</p>
+          <p className="text-sm text-zinc-400">Connect a wallet on Monad Testnet to start building.</p>
           <ConnectButton />
         </>
       ) : chainId !== monadTestnet.id ? (
@@ -67,13 +66,13 @@ export function RegisterCard({ compact = false }: { compact?: boolean }) {
         >
           <input
             className="input flex-1"
-            placeholder="Your monarch name"
+            placeholder="Commander name"
             maxLength={24}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <button className="btn-gold" disabled={!name.trim() || isPending || receipt.isLoading}>
-            {isPending ? "Confirm in wallet..." : receipt.isLoading ? "Crowning..." : "Register"}
+            {isPending ? "Confirm in wallet..." : receipt.isLoading ? "Deploying base..." : "Register"}
           </button>
         </form>
       )}

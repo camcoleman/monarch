@@ -26,6 +26,45 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "EXTRACTOR_BONUS_PER_LEVEL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "EXTRACTOR_CAP_PER_LEVEL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "EXTRACTOR_RATE_PER_LEVEL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "GOLD_PER_WIN",
     "inputs": [],
     "outputs": [
@@ -33,6 +72,32 @@ export const monarchAbi = [
         "name": "",
         "type": "uint32",
         "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "LOOT_BPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_LAND",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ],
     "stateMutability": "view"
@@ -52,19 +117,6 @@ export const monarchAbi = [
   },
   {
     "type": "function",
-    "name": "MINE_BONUS_PER_LEVEL",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint32",
-        "internalType": "uint32"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "STARTING_GOLD",
     "inputs": [],
     "outputs": [
@@ -78,13 +130,26 @@ export const monarchAbi = [
   },
   {
     "type": "function",
-    "name": "STATE_COUNT",
+    "name": "STARTING_LAND",
     "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TROPHIES_PER_LOSS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -98,6 +163,38 @@ export const monarchAbi = [
         "name": "",
         "type": "uint32",
         "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "VAULT_BONUS_PER_LEVEL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "activeSession",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -123,6 +220,33 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "battleCount",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "collect",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "endSession",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "getBuildings",
     "inputs": [
       {
@@ -136,6 +260,62 @@ export const monarchAbi = [
         "name": "",
         "type": "uint8[4]",
         "internalType": "uint8[4]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getHistory",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out",
+        "type": "tuple[]",
+        "internalType": "struct Monarch.BattleRecord[]",
+        "components": [
+          {
+            "name": "winner",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "winnerBps",
+            "type": "int32",
+            "internalType": "int32"
+          },
+          {
+            "name": "timestamp",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "loser",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "loserBps",
+            "type": "int32",
+            "internalType": "int32"
+          },
+          {
+            "name": "loot",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -181,9 +361,14 @@ export const monarchAbi = [
             "internalType": "uint32"
           },
           {
-            "name": "statesOwned",
-            "type": "uint8",
-            "internalType": "uint8"
+            "name": "land",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "lastCollect",
+            "type": "uint64",
+            "internalType": "uint64"
           },
           {
             "name": "exists",
@@ -197,13 +382,51 @@ export const monarchAbi = [
   },
   {
     "type": "function",
-    "name": "getStates",
-    "inputs": [],
+    "name": "getRecentBattles",
+    "inputs": [
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
-        "name": "owners",
-        "type": "address[8]",
-        "internalType": "address[8]"
+        "name": "out",
+        "type": "tuple[]",
+        "internalType": "struct Monarch.BattleRecord[]",
+        "components": [
+          {
+            "name": "winner",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "winnerBps",
+            "type": "int32",
+            "internalType": "int32"
+          },
+          {
+            "name": "timestamp",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "loser",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "loserBps",
+            "type": "int32",
+            "internalType": "int32"
+          },
+          {
+            "name": "loot",
+            "type": "uint32",
+            "internalType": "uint32"
+          }
+        ]
       }
     ],
     "stateMutability": "view"
@@ -229,6 +452,25 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "maxLeverage",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "owner",
     "inputs": [],
     "outputs": [
@@ -242,12 +484,50 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "pendingGold",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "playerList",
     "inputs": [
       {
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "playerOf",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -296,9 +576,14 @@ export const monarchAbi = [
         "internalType": "uint32"
       },
       {
-        "name": "statesOwned",
-        "type": "uint8",
-        "internalType": "uint8"
+        "name": "land",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "lastCollect",
+        "type": "uint64",
+        "internalType": "uint64"
       },
       {
         "name": "exists",
@@ -336,6 +621,30 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "sessions",
+    "inputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "expiry",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "setReferee",
     "inputs": [
       {
@@ -355,11 +664,6 @@ export const monarchAbi = [
         "name": "battleId",
         "type": "bytes32",
         "internalType": "bytes32"
-      },
-      {
-        "name": "stateId",
-        "type": "uint8",
-        "internalType": "uint8"
       },
       {
         "name": "winner",
@@ -406,19 +710,37 @@ export const monarchAbi = [
   },
   {
     "type": "function",
-    "name": "stateOwner",
+    "name": "startSession",
     "inputs": [
       {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
+        "name": "key",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "expiry",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "trophiesPerWin",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
       {
         "name": "",
-        "type": "address",
-        "internalType": "address"
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -447,12 +769,6 @@ export const monarchAbi = [
         "internalType": "bytes32"
       },
       {
-        "name": "stateId",
-        "type": "uint8",
-        "indexed": true,
-        "internalType": "uint8"
-      },
-      {
         "name": "winner",
         "type": "address",
         "indexed": true,
@@ -461,7 +777,7 @@ export const monarchAbi = [
       {
         "name": "loser",
         "type": "address",
-        "indexed": false,
+        "indexed": true,
         "internalType": "address"
       },
       {
@@ -475,6 +791,31 @@ export const monarchAbi = [
         "type": "int32",
         "indexed": false,
         "internalType": "int32"
+      },
+      {
+        "name": "loot",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Collected",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
       }
     ],
     "anonymous": false
@@ -507,6 +848,50 @@ export const monarchAbi = [
         "type": "string",
         "indexed": false,
         "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SessionEnded",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "key",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SessionStarted",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "key",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "expiry",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
       }
     ],
     "anonymous": false
@@ -554,6 +939,11 @@ export const monarchAbi = [
   },
   {
     "type": "error",
+    "name": "CommandCenterTooLow",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidBuilding",
     "inputs": []
   },
@@ -569,7 +959,7 @@ export const monarchAbi = [
   },
   {
     "type": "error",
-    "name": "InvalidState",
+    "name": "InvalidSession",
     "inputs": []
   },
   {
@@ -599,12 +989,7 @@ export const monarchAbi = [
   },
   {
     "type": "error",
-    "name": "OwnerNotInBattle",
-    "inputs": []
-  },
-  {
-    "type": "error",
-    "name": "TownHallTooLow",
+    "name": "TransferFailed",
     "inputs": []
   }
 ] as const;

@@ -3,14 +3,12 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useSignMessage } from "wagmi";
 import {
-  ARENA_MAX_LEVERAGE,
   BATTLE_COLLATERAL,
-  STATES,
-  TROPHIES_PER_WIN,
+  LOOT_PCT,
   goldPerWin,
   signedMessage,
+  trophiesPerWin,
   type BattleTick,
   type BattleView,
   type PlayerRef,
@@ -19,12 +17,13 @@ import {
 import { Celebration } from "@/components/Celebration";
 import { LineChart, type ChartPoint } from "@/components/LineChart";
 import { RegisterCard } from "@/components/RegisterCard";
-import { GoldCoin } from "@/components/village/GoldCoin";
-import { useBuildings, useMe } from "@/hooks/useMonarch";
+import { GoldCoin, LandIcon } from "@/components/base/ui";
+import { useBuildings, useHistory, useMe } from "@/hooks/useMonarch";
+import { useGameActions } from "@/hooks/useSession";
 import { useNow } from "@/hooks/useNow";
 import { MONARCH_ADDRESS, explorerTx } from "@/lib/config";
 import { friendlyError } from "@/lib/errors";
-import { countdown, pct, shortAddr, usd } from "@/lib/format";
+import { countdown, pct, usd } from "@/lib/format";
 import { getSocket } from "@/lib/socket";
 
 type Series = Record<string, ChartPoint[]>;
@@ -84,15 +83,14 @@ export default function BattlePage() {
     return (
       <div className="panel mx-auto max-w-md space-y-3 p-6 text-center">
         <p className="text-lg">{loadError}</p>
-        <Link href="/map" className="btn-gold">
-          Back to the map
+        <Link href="/" className="btn-gold">
+          Return to base
         </Link>
       </div>
     );
   }
-  if (!battle) return <p className="text-center text-zinc-400">Loading battle...</p>;
+  if (!battle) return <p className="hud-text text-center font-display tracking-widest">LOADING BATTLE...</p>;
 
-  const state = STATES[battle.stateId];
   const myAddr = me.address;
   const isCreator = myAddr === battle.creator.address;
   const isOpponent = !!battle.opponent && myAddr === battle.opponent.address;
@@ -103,8 +101,12 @@ export default function BattlePage() {
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <div className="text-center">
-        <p className="text-sm uppercase tracking-[0.3em] text-royal">Battle for</p>
-        <h1 className="font-display text-4xl text-gold">{state.name}</h1>
+        <p className="font-display text-xs uppercase tracking-[0.4em] text-neon">
+          {battle.mode === "match" ? "Matchmade battle" : "Challenge"}
+        </p>
+        <h1 className="font-display text-3xl font-black sm:text-4xl">
+          {battle.creator.name} <span className="text-orange-400">vs</span> {battle.opponent?.name ?? "???"}
+        </h1>
       </div>
 
       {battle.phase === "lobby" && <Lobby battle={battle} isCreator={isCreator} />}
@@ -126,12 +128,12 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [joining, setJoining] = useState(false);
-  const { signMessageAsync } = useSignMessage();
+  const { sign } = useGameActions();
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setLink(window.location.href), []);
 
   const canAct = Boolean(me.address && (me.player || !MONARCH_ADDRESS));
-  const blockedByRuler = battle.requiredOpponent && me.address && battle.requiredOpponent !== me.address;
+  const notForMe = battle.requiredOpponent && me.address && battle.requiredOpponent !== me.address;
 
   const accept = async () => {
     if (!me.address) return;
@@ -140,19 +142,14 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
     try {
       let signature: string;
       try {
-        signature = await signMessageAsync({ message: signedMessage.join(battle.id) });
+        signature = await sign(signedMessage.join(battle.id));
       } catch (err) {
         setError(friendlyError(err));
         return;
       }
       const res = await getSocket()
         .timeout(10_000)
-        .emitWithAck("battle:join", {
-          battleId: battle.id,
-          address: me.address,
-          name: me.player?.name ?? shortAddr(me.address),
-          signature,
-        });
+        .emitWithAck("battle:join", { battleId: battle.id, address: me.address, signature });
       if (!res.ok) setError(res.error);
     } catch {
       setError("Referee server did not respond");
@@ -168,8 +165,8 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
           <p className="text-lg">Waiting for a challenger...</p>
           <p className="text-sm text-zinc-400">
             {battle.requiredOpponent
-              ? "This state has a ruler. Send them the link - only they can accept."
-              : "Share this link with a rival."}
+              ? "Send this link to your target - only they can accept."
+              : "Share this link with a rival. Anyone with a base can accept."}
           </p>
           <div className="flex gap-2">
             <input readOnly value={link} className="input flex-1 font-mono text-xs" />
@@ -190,13 +187,13 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
             <b className="text-gold">{battle.creator.name}</b> challenges you to a 90-second BTC battle.
           </p>
           <p className="text-sm text-zinc-400">
-            Each side gets {usd(BATTLE_COLLATERAL, 0)} of battle collateral and up to {ARENA_MAX_LEVERAGE}x leverage. Highest
-            return wins.
+            Each side gets {usd(BATTLE_COLLATERAL, 0)} of battle collateral and leverage up to their Mech Bay&apos;s limit. Highest
+            return wins land, gold and trophies.
           </p>
           {!canAct ? (
             <RegisterCard compact />
-          ) : blockedByRuler ? (
-            <p className="text-sm text-zinc-400">Only the current ruler of this state can accept this challenge.</p>
+          ) : notForMe ? (
+            <p className="text-sm text-zinc-400">This challenge was sent to another commander.</p>
           ) : (
             <button className="btn-gold w-full text-lg" disabled={joining} onClick={accept}>
               {joining ? "Joining..." : "Accept challenge"}
@@ -211,11 +208,12 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
 
 function PickPanel({ battle, isPlayer, now }: { battle: BattleView; isPlayer: boolean; now: number }) {
   const me = useMe();
+  const maxLev = (me.address && battle.maxLeverage[me.address]) || 1;
   const [side, setSide] = useState<Side>("long");
-  const [leverage, setLeverage] = useState(3);
+  const [leverage, setLeverage] = useState(Math.min(3, maxLev));
   const [error, setError] = useState<string | null>(null);
   const [signing, setSigning] = useState(false);
-  const { signMessageAsync } = useSignMessage();
+  const { sign, session } = useGameActions();
   const locked = me.address ? battle.picked[me.address] : false;
   const players = [battle.creator, battle.opponent!];
 
@@ -226,7 +224,7 @@ function PickPanel({ battle, isPlayer, now }: { battle: BattleView; isPlayer: bo
     try {
       let signature: string;
       try {
-        signature = await signMessageAsync({ message: signedMessage.pick(battle.id, side, leverage) });
+        signature = await sign(signedMessage.pick(battle.id, side, leverage));
       } catch (err) {
         setError(friendlyError(err));
         return;
@@ -276,19 +274,19 @@ function PickPanel({ battle, isPlayer, now }: { battle: BattleView; isPlayer: bo
           </div>
           <label className="block space-y-1">
             <span className="flex justify-between text-sm text-zinc-400">
-              Leverage <span className="font-mono text-gold">{leverage}x</span>
+              Leverage (Mech Bay max {maxLev}x) <span className="font-mono text-gold">{leverage}x</span>
             </span>
             <input
               type="range"
               min={1}
-              max={ARENA_MAX_LEVERAGE}
+              max={maxLev}
               value={leverage}
               onChange={(e) => setLeverage(Number(e.target.value))}
               className="w-full accent-[#f5b301]"
             />
           </label>
           <button className="btn-gold w-full text-lg" disabled={signing} onClick={lockIn}>
-            {signing ? "Sign in your wallet..." : `Lock in ${side} ${leverage}x`}
+            {signing ? (session.active ? "Locking in..." : "Sign in your wallet...") : `Lock in ${side} ${leverage}x`}
           </button>
           <p className="text-center text-xs text-zinc-500">No pick by the deadline defaults to long 1x.</p>
         </>
@@ -373,33 +371,33 @@ function CenterBar({ battle, now, myAddr }: { battle: BattleView; now: number; m
 }
 
 function Result({ battle, myAddr }: { battle: BattleView; myAddr: string | null }) {
-  const state = STATES[battle.stateId];
   const winner = battle.winner === battle.creator.address ? battle.creator : battle.opponent!;
+  const loser = winner === battle.creator ? battle.opponent! : battle.creator;
   const won = myAddr === battle.winner;
-  const defended = battle.defender === battle.winner;
   const { levels } = useBuildings(winner.address);
+  const { records } = useHistory(battle.txHash ? winner.address : undefined, 1);
+  const loot = battle.txHash && records[0]?.loser === loser.address ? records[0].loot : null;
   const gold = goldPerWin(levels?.[1] ?? 1);
   return (
     <div className="panel space-y-3 p-6 text-center">
       {(won || !myAddr) && <Celebration count={won ? 48 : 24} />}
-      <p className={`pop-in font-display text-5xl font-bold ${!myAddr || won ? "text-gold" : "text-down"}`}>
+      <p className={`pop-in font-display text-5xl font-black ${!myAddr || won ? "text-gold" : "text-down"}`}>
         {!myAddr ? `${winner.name} wins` : won ? "VICTORY" : "DEFEAT"}
       </p>
       <p className="text-zinc-300">
-        {winner.name} {defended ? "defends" : "conquers"} <b>{state.name}</b>.
+        {winner.name} raids {loser.name} and claims new territory.
       </p>
-      <div className="flex justify-center gap-6 text-lg">
+      <div className="flex flex-wrap justify-center gap-6 font-display text-lg">
         <span className="pop-in" style={{ animationDelay: "0.2s" }}>
-          🏆 +{TROPHIES_PER_WIN}
+          🏆 +{trophiesPerWin(levels?.[3] ?? 1)}
         </span>
         <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.35s" }}>
           <GoldCoin size={20} /> +{gold}
+          <span className="text-sm text-amber-200">{loot !== null ? ` +${loot} loot` : ` +${LOOT_PCT}% loot`}</span>
         </span>
-        {!defended && (
-          <span className="pop-in" style={{ animationDelay: "0.5s" }}>
-            🏰 +1
-          </span>
-        )}
+        <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.5s" }}>
+          <LandIcon size={20} /> +1
+        </span>
       </div>
       <p className="text-sm">
         {battle.txHash ? (
@@ -414,8 +412,8 @@ function Result({ battle, myAddr }: { battle: BattleView; myAddr: string | null 
           <span className="animate-pulse text-zinc-400">Recording on Monad Testnet...</span>
         )}
       </p>
-      <Link href="/map" className="btn-gold">
-        Back to the map
+      <Link href="/" className="btn-gold">
+        Return to base
       </Link>
     </div>
   );

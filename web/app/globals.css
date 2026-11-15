@@ -1,29 +1,44 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #0b0a12;
-  --color-panel: #15131f;
-  --color-edge: #2a2638;
-  --color-gold: #f5b301;
+  --color-ink: #04060d;
+  --color-panel: #0a1120;
+  --color-edge: #1c2a45;
+  --color-gold: #fbbf24;
   --color-royal: #836ef9;
+  --color-neon: #22d3ee;
   --color-up: #22c55e;
   --color-down: #ef4444;
-  --font-display: ui-serif, Georgia, "Times New Roman", serif;
+  --font-display: var(--font-orbitron), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-exo), ui-sans-serif, system-ui, sans-serif;
 }
 
 html,
 body {
   background: var(--color-ink);
-  color: #e7e5f0;
+  color: #e2e8f5;
 }
 
 body {
-  background-image: radial-gradient(ellipse at top, rgba(131, 110, 249, 0.12), transparent 60%);
+  background-image:
+    radial-gradient(ellipse at top, rgba(34, 211, 238, 0.1), transparent 55%),
+    radial-gradient(ellipse at bottom right, rgba(131, 110, 249, 0.12), transparent 60%),
+    linear-gradient(rgba(34, 211, 238, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(34, 211, 238, 0.035) 1px, transparent 1px);
+  background-size:
+    auto,
+    auto,
+    40px 40px,
+    40px 40px;
   min-height: 100vh;
 }
 
 @utility panel {
-  @apply rounded-2xl border border-edge bg-panel/80 backdrop-blur;
+  @apply rounded-2xl border border-neon/20 bg-panel/80 shadow-[0_0_30px_-12px_rgb(34_211_238/0.35)] backdrop-blur;
+}
+
+@utility holo {
+  @apply border border-neon/35 bg-slate-950/65 shadow-[0_0_24px_-6px_rgb(34_211_238/0.45),inset_0_0_18px_-8px_rgb(34_211_238/0.5)] backdrop-blur-md;
 }
 
 @utility btn {
@@ -31,28 +46,96 @@ body {
 }
 
 @utility btn-gold {
-  @apply btn bg-gold text-ink hover:brightness-110;
+  @apply btn bg-gradient-to-b from-amber-300 to-amber-500 text-ink shadow-[0_0_18px_-4px_rgb(251_191_36/0.7)] hover:brightness-110;
+}
+
+@utility btn-neon {
+  @apply btn border border-neon/60 bg-neon/10 text-neon shadow-[0_0_16px_-4px_rgb(34_211_238/0.7)] hover:bg-neon/20;
 }
 
 @utility btn-ghost {
-  @apply btn border border-edge text-zinc-200 hover:border-gold/60 hover:text-gold;
+  @apply btn border border-edge text-zinc-200 hover:border-neon/60 hover:text-neon;
 }
 
-@utility village-btn {
-  @apply rounded-2xl border-2 border-black/50 px-2.5 py-1 text-sm font-black text-white sm:px-4 sm:py-2 sm:text-base shadow-[0_4px_0_rgb(0_0_0/0.45)] transition [text-shadow:0_2px_0_rgb(0_0_0/0.5)] hover:brightness-110 active:translate-y-0.5 active:shadow-[0_2px_0_rgb(0_0_0/0.45)];
+@utility input {
+  @apply rounded-xl border border-edge bg-ink px-3 py-2 outline-none focus:border-neon/70;
 }
 
-.village-sprite {
+/* Chamfered corners for HUD chips. */
+@utility chamfer {
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+}
+
+.hud-text {
+  text-shadow:
+    0 0 8px rgb(34 211 238 / 0.6),
+    0 2px 0 rgb(0 0 0 / 0.6);
+}
+
+.base-sprite {
   transform: translate(-50%, -100%);
 }
 
-.village-flag {
-  transform-origin: left center;
-  animation: flag-wave 1.6s ease-in-out infinite;
+.collect-bubble {
+  animation: bubble-bob 1.6s ease-in-out infinite;
 }
 
-.village-coin {
-  animation: coin-float 2.2s ease-in-out infinite;
+@keyframes bubble-bob {
+  50% {
+    transform: translate(-50%, -6px);
+  }
+}
+
+.tile-claimed {
+  animation: tile-pulse 3.2s ease-in-out infinite;
+}
+
+@keyframes tile-pulse {
+  50% {
+    fill-opacity: 0.22;
+  }
+}
+
+.radar-sweep {
+  background: conic-gradient(from 0deg, rgb(34 211 238 / 0.55), transparent 25%);
+  animation: radar 1.6s linear infinite;
+}
+
+@keyframes radar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.scanlines {
+  background: repeating-linear-gradient(0deg, rgb(255 255 255 / 0.025) 0 1px, transparent 1px 3px);
+}
+
+.attack-glow {
+  animation: attack-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes attack-glow {
+  50% {
+    box-shadow:
+      0 0 0 4px rgb(0 0 0 / 0.5),
+      0 0 38px 4px rgb(249 115 22 / 0.75);
+  }
+}
+
+.coin-float {
+  animation: coin-float 1.2s ease-out forwards;
+}
+
+@keyframes coin-float {
+  from {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate(-50%, -60px);
+    opacity: 0;
+  }
 }
 
 .confetti-piece {
@@ -72,18 +155,6 @@ body {
   }
 }
 
-.state-flash {
-  animation: state-flash 0.6s ease-in-out 4;
-}
-
-@keyframes state-flash {
-  50% {
-    fill-opacity: 0.25;
-    stroke: #f5b301;
-    stroke-width: 4px;
-  }
-}
-
 .pop-in {
   animation: pop-in 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
 }
@@ -95,30 +166,12 @@ body {
   }
 }
 
-@keyframes flag-wave {
-  0%,
-  100% {
-    transform: skewY(0deg) scaleX(1);
-  }
-  50% {
-    transform: skewY(-6deg) scaleX(0.92);
-  }
+.slide-in-left {
+  animation: slide-in-left 0.25s ease-out both;
 }
 
-@keyframes coin-float {
-  0% {
-    transform: translateY(0);
-    opacity: 0;
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
   }
-  20% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateY(-28px);
-    opacity: 0;
-  }
-}
-
-@utility input {
-  @apply rounded-xl border border-edge bg-ink px-3 py-2 outline-none focus:border-gold/70;
 }

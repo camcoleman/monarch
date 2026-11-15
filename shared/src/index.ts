@@ -15,60 +15,67 @@ export const monadTestnet = defineChain({
 
 export const FAUCET_URL = "https://faucet.monad.xyz";
 
-/** Index in this array is the on-chain state ID. `fips` matches us-atlas feature IDs. */
-export const STATES = [
-  { id: 0, code: "CA", name: "California", fips: "06" },
-  { id: 1, code: "OR", name: "Oregon", fips: "41" },
-  { id: 2, code: "WA", name: "Washington", fips: "53" },
-  { id: 3, code: "TX", name: "Texas", fips: "48" },
-  { id: 4, code: "FL", name: "Florida", fips: "12" },
-  { id: 5, code: "NY", name: "New York", fips: "36" },
-  { id: 6, code: "CO", name: "Colorado", fips: "08" },
-  { id: 7, code: "IL", name: "Illinois", fips: "17" },
-] as const;
-
-export type StateInfo = (typeof STATES)[number];
-
 export const PAPER_START_BALANCE = 10_000;
 export const TRADE_MAX_LEVERAGE = 10;
 export const BATTLE_COLLATERAL = 1_000;
-export const ARENA_MAX_LEVERAGE = 5;
-export const TROPHIES_PER_WIN = 25;
-export const GOLD_PER_WIN = 100;
+/** Mech Bay level 5 allows 6x. */
+export const ARENA_MAX_LEVERAGE = 6;
 
 export const STARTING_GOLD = 200;
+export const GOLD_PER_WIN = 100;
+export const TROPHIES_PER_WIN = 25;
+export const TROPHIES_PER_LOSS = 10;
+export const LOOT_PCT = 10;
+export const STARTING_LAND = 4;
+export const MAX_LAND = 25;
+
 export const MAX_BUILDING_LEVEL = 5;
-export const MINE_BONUS_PER_LEVEL = 20;
+export const EXTRACTOR_BONUS_PER_LEVEL = 20;
+export const VAULT_BONUS_PER_LEVEL = 5;
+export const EXTRACTOR_RATE_PER_LEVEL = 2; // gold per minute
+export const EXTRACTOR_CAP_PER_LEVEL = 150;
+
+export const goldPerWin = (extractorLevel: number) =>
+  GOLD_PER_WIN + EXTRACTOR_BONUS_PER_LEVEL * Math.max(0, extractorLevel - 1);
+export const trophiesPerWin = (vaultLevel: number) =>
+  TROPHIES_PER_WIN + VAULT_BONUS_PER_LEVEL * Math.max(0, vaultLevel - 1);
+export const maxLeverage = (mechBayLevel: number) => Math.max(1, mechBayLevel + 1);
+export const extractorRate = (level: number) => EXTRACTOR_RATE_PER_LEVEL * level;
+export const extractorCap = (level: number) => EXTRACTOR_CAP_PER_LEVEL * level;
 
 /** Index is the on-chain building ID. Upgrade cost to level N is baseCost * N. */
 export const BUILDINGS = [
   {
     id: 0,
-    key: "townhall",
-    name: "Town Hall",
+    key: "commandcenter",
+    name: "Command Center",
     baseCost: 100,
-    description: "The heart of your kingdom. Other buildings can't be upgraded past its level.",
+    effect: (lv: number) => `Max building level ${lv}`,
+    description: "The heart of your base. No other building can be upgraded past its level.",
   },
   {
     id: 1,
-    key: "goldmine",
-    name: "Gold Mine",
+    key: "extractor",
+    name: "Gold Extractor",
     baseCost: 60,
-    description: `Each level above 1 adds +${MINE_BONUS_PER_LEVEL} gold to every battle victory.`,
+    effect: (lv: number) => `${extractorRate(lv)} gold/min · +${goldPerWin(lv) - GOLD_PER_WIN} gold per win`,
+    description: "Mines gold over time (tap to collect) and boosts every victory's reward.",
   },
   {
     id: 2,
-    key: "barracks",
-    name: "Barracks",
+    key: "mechbay",
+    name: "Mech Bay",
     baseCost: 50,
-    description: "Where your traders train. A symbol of military might.",
+    effect: (lv: number) => `Up to ${maxLeverage(lv)}x leverage in battle`,
+    description: "Builds your war machines. Higher levels unlock more battle leverage.",
   },
   {
     id: 3,
-    key: "trophyhall",
-    name: "Trophy Hall",
+    key: "trophyvault",
+    name: "Trophy Vault",
     baseCost: 80,
-    description: "Displays your conquests and trophies for all rivals to see.",
+    effect: (lv: number) => `${trophiesPerWin(lv)} trophies per win`,
+    description: "Stores your glory. Each level adds trophies to every victory.",
   },
 ] as const;
 
@@ -77,7 +84,22 @@ export type BuildingInfo = (typeof BUILDINGS)[number];
 export const upgradeCost = (buildingId: number, currentLevel: number) =>
   BUILDINGS[buildingId].baseCost * (currentLevel + 1);
 
-export const goldPerWin = (mineLevel: number) => GOLD_PER_WIN + MINE_BONUS_PER_LEVEL * Math.max(0, mineLevel - 1);
+export const LEAGUES = [
+  { name: "Bronze", min: 0, color: "#d97706" },
+  { name: "Silver", min: 100, color: "#cbd5e1" },
+  { name: "Gold", min: 250, color: "#fbbf24" },
+  { name: "Crystal", min: 500, color: "#a78bfa" },
+  { name: "Titan", min: 1000, color: "#22d3ee" },
+  { name: "Monarch", min: 2000, color: "#f472b6" },
+] as const;
+
+export type League = (typeof LEAGUES)[number];
+
+export function leagueFor(trophies: number): { league: League; next: League | null } {
+  let i = 0;
+  while (i + 1 < LEAGUES.length && trophies >= LEAGUES[i + 1].min) i++;
+  return { league: LEAGUES[i], next: LEAGUES[i + 1] ?? null };
+}
 
 export type Side = "long" | "short";
 
@@ -91,6 +113,14 @@ export function computeReturnPct(side: Side, leverage: number, entry: number, pr
 export interface PriceTick {
   p: number;
   t: number;
+}
+
+/** Rolling 24h BTC-USD market stats. */
+export interface MarketStats {
+  open24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
 }
 
 export interface PlayerRef {
@@ -108,14 +138,15 @@ export type BattlePhase = "lobby" | "picking" | "live" | "ended";
 export interface BattleView {
   id: string;
   onchainId: string;
-  stateId: number;
+  /** "match" came from Attack matchmaking; "challenge" was a direct invite. */
+  mode: "match" | "challenge";
   phase: BattlePhase;
   creator: PlayerRef;
   opponent: PlayerRef | null;
-  /** Current ruler of the state when the battle was created, if any. */
-  defender: string | null;
   /** If set, only this address may accept the challenge. */
   requiredOpponent: string | null;
+  /** Leverage cap per player, from their Mech Bay. */
+  maxLeverage: Record<string, number>;
   picked: Record<string, boolean>;
   /** Only revealed once the round is live. */
   picks: Record<string, Pick> | null;
@@ -129,13 +160,17 @@ export interface BattleView {
   settleError: string | null;
 }
 
+/** Compact battle info for the live feed. */
 export interface BattleSummary {
   id: string;
-  stateId: number;
+  mode: BattleView["mode"];
   phase: BattlePhase;
   creator: PlayerRef;
   opponent: PlayerRef | null;
   requiredOpponent: string | null;
+  endsAt: number | null;
+  returns: Record<string, number>;
+  winner: string | null;
 }
 
 export interface BattleTick {
@@ -147,43 +182,51 @@ export interface BattleTick {
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
-/** How long a signed create request stays valid. */
+/** How long a signed timestamped request stays valid. */
 export const SIGNATURE_TTL_MS = 5 * 60_000;
 
-/** Messages players sign with their wallet so the referee knows each action is really theirs. */
+/**
+ * Messages players sign so the referee knows each action is really theirs.
+ * They can be signed by the wallet itself or by its on-chain session key.
+ */
 export const signedMessage = {
-  create: (stateId: number, timestamp: number) =>
-    `MONARCH: declare war on ${STATES[stateId]?.name ?? stateId}\nstate:${stateId}\nat:${timestamp}`,
+  findMatch: (timestamp: number) => `MONARCH: find a match\nat:${timestamp}`,
+  challenge: (target: string | null, timestamp: number) =>
+    `MONARCH: issue a challenge\nto:${target ? target.toLowerCase() : "anyone"}\nat:${timestamp}`,
   join: (battleId: string) => `MONARCH: accept battle\nbattle:${battleId}`,
   pick: (battleId: string, side: Side, leverage: number) =>
     `MONARCH: lock in ${side} ${leverage}x\nbattle:${battleId}`,
 };
 
-export interface CreateBattlePayload {
-  stateId: number;
+interface Signed {
   address: string;
-  name: string;
+  signature: string;
+}
+
+export interface FindMatchPayload extends Signed {
   timestamp: number;
-  signature: string;
 }
 
-export interface JoinBattlePayload {
-  battleId: string;
-  address: string;
-  name: string;
-  signature: string;
+export interface ChallengePayload extends Signed {
+  /** Opponent address, or null for an open invite link. */
+  target: string | null;
+  timestamp: number;
 }
 
-export interface PickPayload {
+export interface JoinBattlePayload extends Signed {
   battleId: string;
-  address: string;
+}
+
+export interface PickPayload extends Signed {
+  battleId: string;
   side: Side;
   leverage: number;
-  signature: string;
 }
 
 export interface ClientToServerEvents {
-  "battle:create": (p: CreateBattlePayload, ack: (r: Ack<{ battleId: string }>) => void) => void;
+  "match:find": (p: FindMatchPayload, ack: (r: Ack<{ battleId: string | null }>) => void) => void;
+  "match:cancel": (p: { address: string }, ack: (r: Ack) => void) => void;
+  "battle:challenge": (p: ChallengePayload, ack: (r: Ack<{ battleId: string }>) => void) => void;
   "battle:watch": (p: { battleId: string }, ack: (r: Ack<{ battle: BattleView }>) => void) => void;
   "battle:join": (p: JoinBattlePayload, ack: (r: Ack) => void) => void;
   "battle:pick": (p: PickPayload, ack: (r: Ack) => void) => void;
@@ -192,9 +235,14 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   price: (tick: PriceTick) => void;
   "price:history": (ticks: PriceTick[]) => void;
+  market: (stats: MarketStats) => void;
   "battle:state": (battle: BattleView) => void;
   "battle:tick": (tick: BattleTick) => void;
-  "battles:open": (battles: BattleSummary[]) => void;
+  /** Every battle that is open, in progress, or recently ended. */
+  "battles:live": (battles: BattleSummary[]) => void;
+  /** Matchmaking paired this socket's player into a battle. */
+  "match:found": (p: { battleId: string }) => void;
+  "match:queue": (p: { searching: number }) => void;
   /** A settlement landed on-chain; clients should refetch contract reads. */
   "chain:updated": () => void;
 }
