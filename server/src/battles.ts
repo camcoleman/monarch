@@ -3,10 +3,17 @@ import type { Server, Socket } from "socket.io";
 import { isAddress, keccak256, toHex, type Hex } from "viem";
 import {
   ARENA_MAX_LEVERAGE,
+  ASSET_IDS,
+  BOT_PLAYER,
+  DEFAULT_ASSET,
   SIGNATURE_TTL_MS,
   computeReturnPct,
+  isAsset,
   signedMessage,
+  unlockedAssets,
   type Ack,
+  type AssetId,
+  type AssetPrices,
   type BattlePhase,
   type BattleSummary,
   type BattleView,
@@ -17,7 +24,8 @@ import {
   type Pick,
   type PickPayload,
   type PlayerRef,
-  type PriceTick,
+  type PracticePayload,
+  type PricesTick,
   type ServerToClientEvents,
 } from "@monarch/shared";
 import { errMessage, type Chain } from "./chain";
@@ -33,6 +41,7 @@ const ENDED_TTL_MS = 30 * 60_000;
 const FEED_ENDED_MS = 3 * 60_000;
 const LOBBY_TTL_MS = 5 * 60_000;
 const FEED_THROTTLE_MS = 2_000;
+const BOT_MAX_LEVERAGE = 4;
 
 interface Battle {
   id: string;
@@ -43,9 +52,10 @@ interface Battle {
   opponent: PlayerRef | null;
   requiredOpponent: string | null;
   maxLeverage: Record<string, number>;
+  unlocked: Record<string, AssetId[]>;
   picks: Record<string, Pick | null>;
-  entryPrice: number | null;
-  lastPrice: number | null;
+  entryPrices: AssetPrices | null;
+  lastPrices: AssetPrices | null;
   pickEndsAt: number | null;
   endsAt: number | null;
   endedAt: number | null;
@@ -54,6 +64,7 @@ interface Battle {
   txHash: string | null;
   settleError: string | null;
   timer?: NodeJS.Timeout;
+  botTimer?: NodeJS.Timeout;
 }
 
 interface QueueEntry {
@@ -153,6 +164,30 @@ export class BattleManager {
     return { ok: true, battleId: battle.id };
   }
 
+  /** Off-chain practice round against the bot. No signature or registration; nothing is settled. */
+  async practice(socket: ClientSocket, p: PracticePayload): Promise<Ack<{ battleId: string; playerId: string }>> {
+    let me: PlayerRef;
+    if (p.address) {
+      if (!isAddress(p.address)) return fail("Invalid address");
+      const address = p.address.toLowerCase();
+      me = playerRef(address, (await this.chain.getPlayerName(address).catch(() => undefined)) ?? undefined);
+    } else {
+      const guestId = p.guestId && /^guest-[0-9a-f]{8}$/.test(p.guestId) ? p.guestId : `guest-${randomBytes(4).toString("hex")}`;
+      me = { address: guestId, name: "Guest Commander" };
+    }
+
+    for (const b of this.battles.values()) {
+      if (b.mode === "practice" && b.creator.address === me.address && b.phase !== "ended") this.discard(b);
+    }
+
+    const battle = this.newBattle("practice", me, BOT_PLAYER.address);
+    battle.opponent = BOT_PLAYER;
+    socket.join(room(battle.id));
+    await this.startPicking(battle);
+    console.log(`[battle ${battle.id}] practice for ${me.name}`);
+    return { ok: true, battleId: battle.id, playerId: me.address };
+  }
+
   watch(socket: ClientSocket, battleId: string): Ack<{ battle: BattleView }> {
     const battle = this.battles.get(battleId);
     if (!battle) return fail("Battle not found");
@@ -189,37 +224,37 @@ export class BattleManager {
     const battle = this.battles.get(p.battleId);
     if (!battle) return fail("Battle not found");
     if (battle.phase !== "picking") return fail("Picks are closed");
-    const address = p.address.toLowerCase();
-    if (!(address in battle.picks)) return fail("You are not in this battle");
+    const address = String(p.address).toLowerCase();
+    if (!(address in battle.picks) || address === BOT_PLAYER.address) return fail("You are not in this battle");
     if (p.side !== "long" && p.side !== "short") return fail("Invalid side");
+    if (!isAsset(p.asset) || !battle.unlocked[address]?.includes(p.asset)) {
+      return fail("Upgrade your Town Hall to trade that coin");
+    }
     const cap = battle.maxLeverage[address] ?? 1;
     if (!Number.isInteger(p.leverage) || p.leverage < 1 || p.leverage > cap) {
-      return fail(`Your Mech Bay allows 1-${cap}x leverage`);
+      return fail(`Your Barracks allows 1-${cap}x leverage`);
     }
-    if (!(await this.chain.verify(address, signedMessage.pick(battle.id, p.side, p.leverage), p.signature))) {
+    if (
+      battle.mode !== "practice" &&
+      !(await this.chain.verify(address, signedMessage.pick(battle.id, p.asset, p.side, p.leverage), p.signature))
+    ) {
       return fail(BAD_SIGNATURE);
     }
     if (battle.phase !== "picking") return fail("Picks are closed");
 
-    battle.picks[address] = { side: p.side, leverage: p.leverage };
-    if (Object.values(battle.picks).every(Boolean)) {
-      clearTimeout(battle.timer);
-      this.startLive(battle);
-    } else {
-      this.emitState(battle);
-    }
+    this.lockPick(battle, address, { asset: p.asset, side: p.side, leverage: p.leverage });
     return { ok: true };
   }
 
-  onPrice(tick: PriceTick) {
+  onPrice(tick: PricesTick) {
     let anyLive = false;
     for (const battle of this.battles.values()) {
       if (battle.phase !== "live") continue;
-      anyLive = true;
+      if (battle.mode !== "practice") anyLive = true;
       this.updateReturns(battle, tick.p);
       this.io.to(room(battle.id)).emit("battle:tick", {
         battleId: battle.id,
-        price: tick.p,
+        prices: tick.p,
         t: tick.t,
         returns: battle.returns,
       });
@@ -230,6 +265,7 @@ export class BattleManager {
   liveSummaries(): BattleSummary[] {
     const now = Date.now();
     return [...this.battles.values()]
+      .filter((b) => b.mode !== "practice")
       .filter((b) => b.phase !== "ended" || (b.endedAt !== null && now - b.endedAt < FEED_ENDED_MS))
       .map((b) => ({
         id: b.id,
@@ -274,9 +310,10 @@ export class BattleManager {
       opponent: null,
       requiredOpponent,
       maxLeverage: {},
+      unlocked: {},
       picks: { [creator.address]: null },
-      entryPrice: null,
-      lastPrice: null,
+      entryPrices: null,
+      lastPrices: null,
       pickEndsAt: null,
       endsAt: null,
       endedAt: null,
@@ -292,37 +329,79 @@ export class BattleManager {
   private async startPicking(battle: Battle) {
     if (!battle.opponent) return;
     const players = [battle.creator.address, battle.opponent.address];
-    const caps = await Promise.all(
-      players.map((a) => this.chain.getMaxLeverage(a).catch(() => 1))
-    );
-    players.forEach((a, i) => {
-      battle.maxLeverage[a] = Math.min(ARENA_MAX_LEVERAGE, caps[i]);
-      battle.picks[a] = null;
-    });
+    if (battle.mode === "practice") {
+      // Practice unlocks everything so a demo can show every coin.
+      for (const a of players) {
+        battle.maxLeverage[a] = a === BOT_PLAYER.address ? BOT_MAX_LEVERAGE : ARENA_MAX_LEVERAGE;
+        battle.unlocked[a] = [...ASSET_IDS];
+        battle.picks[a] = null;
+      }
+    } else {
+      const stats = await Promise.all(
+        players.map(async (a) => {
+          const [cap, townHall] = await Promise.all([
+            this.chain.getMaxLeverage(a).catch(() => 1),
+            this.chain.getTownHallLevel(a).catch(() => 1),
+          ]);
+          return { cap, townHall };
+        })
+      );
+      players.forEach((a, i) => {
+        battle.maxLeverage[a] = Math.min(ARENA_MAX_LEVERAGE, stats[i].cap);
+        battle.unlocked[a] = unlockedAssets(stats[i].townHall);
+        battle.picks[a] = null;
+      });
+    }
     battle.phase = "picking";
     battle.pickEndsAt = Date.now() + this.config.pickSeconds * 1000;
     battle.timer = setTimeout(() => this.startLive(battle), this.config.pickSeconds * 1000);
+    if (battle.mode === "practice") this.scheduleBotPick(battle);
     this.emitState(battle);
     this.broadcastLive();
   }
 
+  private scheduleBotPick(battle: Battle) {
+    const delay = 2_000 + Math.random() * 4_000;
+    battle.botTimer = setTimeout(() => {
+      if (battle.phase !== "picking") return;
+      const assets = battle.unlocked[BOT_PLAYER.address];
+      this.lockPick(battle, BOT_PLAYER.address, {
+        asset: assets[Math.floor(Math.random() * assets.length)],
+        side: Math.random() < 0.5 ? "long" : "short",
+        leverage: 1 + Math.floor(Math.random() * BOT_MAX_LEVERAGE),
+      });
+    }, delay);
+  }
+
+  private lockPick(battle: Battle, address: string, pick: Pick) {
+    battle.picks[address] = pick;
+    if (Object.values(battle.picks).every(Boolean)) {
+      clearTimeout(battle.timer);
+      this.startLive(battle);
+    } else {
+      this.emitState(battle);
+    }
+  }
+
   private startLive(battle: Battle) {
     if (battle.phase !== "picking") return;
+    for (const addr of Object.keys(battle.picks)) {
+      battle.picks[addr] ??= { asset: DEFAULT_ASSET, side: "long", leverage: 1 };
+    }
     const latest = this.feed.latest;
-    if (!latest) {
+    const needed = Object.values(battle.picks).map((p) => p!.asset);
+    if (!latest || needed.some((a) => latest.p[a] === undefined)) {
       battle.timer = setTimeout(() => this.startLive(battle), 1000);
       return;
     }
-    for (const addr of Object.keys(battle.picks)) {
-      battle.picks[addr] ??= { side: "long", leverage: 1 };
-    }
+    clearTimeout(battle.botTimer);
     battle.phase = "live";
-    battle.entryPrice = latest.p;
-    battle.lastPrice = latest.p;
+    battle.entryPrices = { ...latest.p };
+    battle.lastPrices = { ...latest.p };
     battle.endsAt = Date.now() + this.config.roundSeconds * 1000;
     this.updateReturns(battle, latest.p);
     battle.timer = setTimeout(() => this.finish(battle), this.config.roundSeconds * 1000);
-    console.log(`[battle ${battle.id}] live at $${latest.p}`);
+    console.log(`[battle ${battle.id}] live: ${needed.map((a) => `${a} $${latest.p[a]}`).join(", ")}`);
     this.emitState(battle);
     this.broadcastLive();
   }
@@ -347,6 +426,7 @@ export class BattleManager {
     this.emitState(battle);
     this.broadcastLive();
     setTimeout(() => this.battles.delete(battle.id), ENDED_TTL_MS);
+    if (battle.mode === "practice") return;
 
     this.chain
       .settle({
@@ -368,17 +448,30 @@ export class BattleManager {
       .finally(() => this.emitState(battle));
   }
 
-  private updateReturns(battle: Battle, price: number) {
-    if (battle.entryPrice === null) return;
-    battle.lastPrice = price;
+  /** Drops a battle that nobody will finish, e.g. a practice round replaced by a new one. */
+  private discard(battle: Battle) {
+    clearTimeout(battle.timer);
+    clearTimeout(battle.botTimer);
+    battle.phase = "ended";
+    this.battles.delete(battle.id);
+  }
+
+  private updateReturns(battle: Battle, prices: AssetPrices) {
+    if (!battle.entryPrices) return;
+    battle.lastPrices = { ...battle.lastPrices, ...prices };
     for (const [addr, pick] of Object.entries(battle.picks)) {
-      if (pick) battle.returns[addr] = computeReturnPct(pick.side, pick.leverage, battle.entryPrice, price);
+      const entry = pick && battle.entryPrices[pick.asset];
+      const price = pick && battle.lastPrices[pick.asset];
+      if (pick && entry && price) battle.returns[addr] = computeReturnPct(pick.side, pick.leverage, entry, price);
     }
   }
 
   private activeBattleOf(address: string) {
     return [...this.battles.values()].find(
-      (b) => b.phase !== "ended" && (b.creator.address === address || b.opponent?.address === address)
+      (b) =>
+        b.mode !== "practice" &&
+        b.phase !== "ended" &&
+        (b.creator.address === address || b.opponent?.address === address)
     );
   }
 
@@ -393,10 +486,11 @@ export class BattleManager {
       opponent: b.opponent,
       requiredOpponent: b.requiredOpponent,
       maxLeverage: b.maxLeverage,
+      unlocked: b.unlocked,
       picked: Object.fromEntries(Object.entries(b.picks).map(([k, v]) => [k, Boolean(v)])),
       picks: revealed ? (b.picks as Record<string, Pick>) : null,
-      entryPrice: b.entryPrice,
-      lastPrice: b.lastPrice,
+      entryPrices: b.entryPrices,
+      lastPrices: b.lastPrices,
       pickEndsAt: b.pickEndsAt,
       endsAt: b.endsAt,
       returns: b.returns,

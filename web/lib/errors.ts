@@ -1,9 +1,9 @@
 const CONTRACT_ERRORS: Record<string, string> = {
   NotEnoughGold: "Not enough gold. Win battles to earn more.",
-  TownHallTooLow: "Upgrade your Town Hall first.",
+  CommandCenterTooLow: "Upgrade your Town Hall first.",
   MaxLevelReached: "This building is already at max level.",
-  NotRegistered: "Register your kingdom first.",
-  AlreadyRegistered: "This wallet already has a kingdom.",
+  NotRegistered: "Build your village first.",
+  AlreadyRegistered: "This wallet already has a village.",
   InvalidName: "Names must be 1-24 characters.",
 };
 

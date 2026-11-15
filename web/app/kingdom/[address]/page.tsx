@@ -9,12 +9,12 @@ export default function ScoutPage() {
   const { address } = useParams<{ address: string }>();
   const { player, isLoading } = usePlayer(address);
 
-  if (isLoading) return <p className="hud-text pt-24 text-center font-display tracking-widest">SCOUTING BASE...</p>;
+  if (isLoading) return <p className="clash-text pt-24 text-center font-display text-2xl">Scouting village...</p>;
   if (!player) {
     return (
       <div className="panel mx-auto max-w-md space-y-3 p-6 text-center">
-        <p>No base found at this address.</p>
-        <Link href="/leaderboard" className="btn-gold">
+        <p>No village found at this address.</p>
+        <Link href="/leaderboard" className="btn-green">
           Back to rankings
         </Link>
       </div>

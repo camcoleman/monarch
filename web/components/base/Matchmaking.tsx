@@ -1,26 +1,26 @@
 "use client";
 
-import { Link2, Swords } from "lucide-react";
+import { Bot, Link2, Swords } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { signedMessage } from "@monarch/shared";
 import { useGameActions } from "@/hooks/useSession";
 import { useSearchingCount } from "@/hooks/useLiveBattles";
 import { friendlyError } from "@/lib/errors";
+import { startPractice } from "@/lib/practice";
 import { getSocket } from "@/lib/socket";
-import { HoloModal } from "./ui";
+import { ClashModal } from "./ui";
 
-type Status = "signing" | "searching" | "idle" | "error";
+type Status = "idle" | "signing" | "searching" | "error";
 
-/** Attack: queue for a random opponent, or challenge a specific player / open invite link. */
+/** Attack: queue for a random opponent, practice against the bot, or challenge a specific player / open invite link. */
 export function MatchmakingModal({ onClose, target }: { onClose: () => void; target?: { address: string; name: string } }) {
   const router = useRouter();
   const { sign, me, session } = useGameActions();
   const searchingCount = useSearchingCount();
-  const [status, setStatus] = useState<Status>(target ? "idle" : "signing");
+  const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
-  const started = useRef(false);
   const queued = useRef(false);
 
   useEffect(() => {
@@ -48,6 +48,11 @@ export function MatchmakingModal({ onClose, target }: { onClose: () => void; tar
     setStatus("error");
   };
 
+  const leaveQueue = () => {
+    if (queued.current && me.address) getSocket().emit("match:cancel", { address: me.address }, () => {});
+    queued.current = false;
+  };
+
   const findMatch = async () => {
     if (!me.address) return;
     setError(null);
@@ -67,15 +72,23 @@ export function MatchmakingModal({ onClose, target }: { onClose: () => void; tar
     }
   };
 
+  const practice = async () => {
+    setError(null);
+    setStatus("signing");
+    leaveQueue();
+    try {
+      router.push(`/battle/${await startPractice(me.address)}`);
+    } catch (err) {
+      fail(friendlyError(err));
+    }
+  };
+
   const challenge = async (to: string | null) => {
     if (!me.address) return;
     setError(null);
     setStatus("signing");
+    leaveQueue();
     try {
-      if (queued.current) {
-        getSocket().emit("match:cancel", { address: me.address }, () => {});
-        queued.current = false;
-      }
       const timestamp = Date.now();
       const signature = await sign(signedMessage.challenge(to, timestamp));
       const res = await getSocket()
@@ -88,69 +101,95 @@ export function MatchmakingModal({ onClose, target }: { onClose: () => void; tar
     }
   };
 
-  useEffect(() => {
-    if (started.current || target) return;
-    started.current = true;
-    findMatch();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const busy = status === "signing";
 
   return (
-    <HoloModal title={target ? `Attack ${target.name}` : "Find a match"} onClose={onClose}>
-      <div className="flex flex-col items-center gap-5 text-center">
-        <div className="relative h-40 w-40 overflow-hidden rounded-full border-2 border-neon/50 bg-slate-950 shadow-[0_0_40px_-8px_#22d3ee]">
-          {[0.33, 0.66].map((s) => (
-            <span key={s} className="absolute inset-0 m-auto rounded-full border border-neon/30" style={{ width: `${s * 100}%`, height: `${s * 100}%` }} />
-          ))}
-          <span className="absolute inset-x-0 top-1/2 h-px bg-neon/25" />
-          <span className="absolute inset-y-0 left-1/2 w-px bg-neon/25" />
-          {(status === "searching" || status === "signing") && <span className="radar-sweep absolute inset-0 rounded-full" />}
-          <Swords className="absolute inset-0 m-auto text-orange-400 drop-shadow-[0_0_10px_#f97316]" size={44} />
-        </div>
+    <ClashModal title={target ? `Attack ${target.name}` : "Attack!"} onClose={onClose}>
+      <div className="flex flex-col items-center gap-4 text-center">
+        <SearchScene searching={status === "searching" || busy} />
 
         {target ? (
-          <p className="text-zinc-300">
-            Challenge <b className="text-gold">{target.name}</b> to a BTC battle. They get an invite link; winner takes land, gold and
-            trophies.
+          <p>
+            Challenge <b>{target.name}</b> to a trading battle. They get an invite link; the winner takes land, gold and trophies.
           </p>
         ) : status === "searching" ? (
           <div className="space-y-1">
-            <p className="hud-text font-display text-lg font-bold">Scanning for opponents...</p>
-            <p className="text-sm text-zinc-400">
+            <p className="font-display text-xl">Searching for opponents...</p>
+            <p className="text-sm text-muted">
               {elapsed}s · {Math.max(1, searchingCount)} commander{searchingCount === 1 ? "" : "s"} searching
             </p>
           </div>
-        ) : status === "signing" ? (
-          <p className="text-sm text-zinc-300">{session.active ? "Engaging..." : "Sign the request in your wallet..."}</p>
-        ) : null}
+        ) : busy ? (
+          <p className="text-sm">{session.active ? "Getting ready..." : "Sign the request in your wallet..."}</p>
+        ) : (
+          <p className="text-sm text-muted">Battle a rival for loot and territory, or warm up against the Training Bot.</p>
+        )}
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm font-bold text-down">{error}</p>}
 
-        <div className="grid w-full gap-2">
+        <div className="grid w-full gap-2.5">
           {target ? (
-            <button className="btn-gold gap-2 text-lg" disabled={status === "signing"} onClick={() => challenge(target.address)}>
-              <Swords size={20} /> {status === "signing" ? "Signing..." : "Send challenge"}
+            <button className="btn-red text-xl" disabled={busy} onClick={() => challenge(target.address)}>
+              <Swords size={22} strokeWidth={3} /> {busy ? "Signing..." : "Send challenge"}
             </button>
           ) : (
             <>
-              {status === "error" && (
-                <button className="btn-gold gap-2" onClick={findMatch}>
-                  <Swords size={18} /> Try again
+              {status !== "searching" && (
+                <button className="btn-red text-xl" disabled={busy} onClick={findMatch}>
+                  <Swords size={22} strokeWidth={3} /> Find a match
                 </button>
               )}
-              <button className="btn-neon gap-2" disabled={status === "signing"} onClick={() => challenge(null)}>
-                <Link2 size={18} /> Invite a friend instead
+              <button className="btn-green text-lg" disabled={busy} onClick={practice}>
+                <Bot size={20} strokeWidth={3} /> Practice vs Bot
+              </button>
+              <button className="btn-blue text-base" disabled={busy} onClick={() => challenge(null)}>
+                <Link2 size={18} strokeWidth={3} /> Invite a friend
               </button>
             </>
           )}
           <button className="btn-ghost" onClick={onClose}>
-            Cancel
+            {status === "searching" ? "Stop searching" : "Cancel"}
           </button>
         </div>
-        {!session.active && (
-          <p className="text-xs text-zinc-500">Tip: turn on Fast Mode (top right) to skip wallet pop-ups during battles.</p>
+        {!target && (
+          <p className="text-xs text-muted">
+            Practice battles are free and off-chain: no rewards, no wallet pop-ups.
+            {!session.active && " Turn on Fast Mode to skip pop-ups in real battles too."}
+          </p>
         )}
       </div>
-    </HoloModal>
+    </ClashModal>
+  );
+}
+
+/** Crossed swords over drifting clouds, Clash's "searching" screen in miniature. */
+function SearchScene({ searching }: { searching: boolean }) {
+  return (
+    <div className="relative h-32 w-full overflow-hidden rounded-2xl border-[3px] border-[#1d1206] bg-[linear-gradient(180deg,#7fd0ff,#bfeaff)]">
+      {[
+        { left: "4%", top: "18%", w: 90 },
+        { left: "58%", top: "8%", w: 110 },
+        { left: "30%", top: "56%", w: 120 },
+      ].map((c, i) => (
+        <svg
+          key={i}
+          viewBox="0 0 100 50"
+          className={`absolute ${searching ? "cloud-drift" : ""}`}
+          style={{ left: c.left, top: c.top, width: c.w, animationDelay: `${i * 0.6}s` }}
+        >
+          <path
+            d="M20 45a15 15 0 0 1 2-30 20 20 0 0 1 37-6 16 16 0 0 1 27 10 13 13 0 0 1-3 26Z"
+            fill="#fff"
+            stroke="#1d1206"
+            strokeWidth="2.5"
+          />
+        </svg>
+      ))}
+      <Swords
+        size={58}
+        strokeWidth={2.5}
+        className={`absolute inset-0 m-auto text-white drop-shadow-[0_3px_0_#1d1206] ${searching ? "swords-spin" : ""}`}
+      />
+    </div>
   );
 }

@@ -1,12 +1,12 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import type { BattleSummary, MarketStats } from "@monarch/shared";
+import { DEFAULT_ASSET, type AssetId, type BattleSummary, type MarketStats } from "@monarch/shared";
 import { getSocket } from "@/lib/socket";
 
 let battles: BattleSummary[] = [];
 let searching = 0;
-let market: MarketStats | null = null;
+let market: Partial<Record<AssetId, MarketStats>> = {};
 let started = false;
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
@@ -44,7 +44,7 @@ export function useSearchingCount(): number {
   return useSyncExternalStore(subscribe, () => searching, () => 0);
 }
 
-/** Rolling 24h BTC-USD stats. */
-export function useMarket(): MarketStats | null {
-  return useSyncExternalStore(subscribe, () => market, () => null);
+/** Rolling 24h stats for one asset. */
+export function useMarket(asset: AssetId = DEFAULT_ASSET): MarketStats | null {
+  return useSyncExternalStore(subscribe, () => market[asset] ?? null, () => null);
 }

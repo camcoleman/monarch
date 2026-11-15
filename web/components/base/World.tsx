@@ -7,8 +7,8 @@ import { GoldCoin } from "./ui";
 /** World coordinates; the ground art is 16:9. */
 const VIEW_W = 1600;
 const VIEW_H = 900;
-/** Isometric 5x5 territory grid laid over the central platform of the ground art. */
-export const GRID = { cx: 805, cy: 440, tw: 236, th: 123, size: 5 };
+/** Isometric 5x5 territory grid laid over the central grass field of the ground art. */
+export const GRID = { cx: 808, cy: 428, tw: 212, th: 140, size: 5 };
 
 type Tile = { i: number; j: number };
 
@@ -19,7 +19,8 @@ const BUILDING_TILES: Tile[] = [
   { i: 3, j: 1 },
   { i: 3, j: 3 },
 ];
-const BUILDING_WIDTH = [250, 185, 185, 165];
+const BUILDING_WIDTH = [215, 185, 165, 160];
+const CASTLE_WIDTH = 78;
 
 const tileCenter = ({ i, j }: Tile) => ({
   x: GRID.cx + ((i - j) * GRID.tw) / 2,
@@ -120,7 +121,7 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
   return (
     <div
       ref={frameRef}
-      className="absolute inset-0 cursor-grab touch-none overflow-hidden bg-ink active:cursor-grabbing"
+      className="absolute inset-0 cursor-grab touch-none overflow-hidden bg-[#3f7a1c] active:cursor-grabbing"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => {
@@ -130,67 +131,55 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
       onWheel={(e) => setZoom((z) => Math.min(1.9, Math.max(1, z - e.deltaY * 0.0012)))}
     >
       <div
-        className="absolute bg-[url(/base/ground.jpg)] bg-cover"
+        className="absolute bg-[url(/village/ground.jpg)] bg-cover"
         style={{ width: worldW, height: worldH, transform: `translate(${offset.x}px, ${offset.y}px)` }}
         onClickCapture={(e) => {
           if (drag.current?.moved) e.stopPropagation();
         }}
       >
         <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} className="pointer-events-none absolute inset-0 h-full w-full">
-          <defs>
-            <filter id="tile-glow" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="b" />
-              <feMerge>
-                <feMergeNode in="b" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
           {TILE_ORDER.map((t, idx) => {
             const owned = idx < land;
             const isNext = nextTile && t.i === nextTile.i && t.j === nextTile.j;
             return (
               <polygon
                 key={`${t.i}-${t.j}`}
-                points={tilePoints(t, 4)}
-                className={owned ? "tile-claimed" : ""}
-                fill={owned ? "#22d3ee" : "#020617"}
-                fillOpacity={owned ? 0.12 : 0.45}
-                stroke={owned ? "#67e8f9" : isNext ? "#fbbf24" : "#334155"}
-                strokeOpacity={owned ? 0.85 : isNext ? 0.9 : 0.5}
-                strokeWidth={owned ? 2.5 : 2}
-                strokeDasharray={owned ? undefined : "8 6"}
-                filter={owned ? "url(#tile-glow)" : undefined}
+                points={tilePoints(t, 3)}
+                fill={owned ? "#c8f07a" : "#1f3d0c"}
+                fillOpacity={owned ? 0.16 : 0.32}
+                stroke={isNext ? "#ffd84a" : "#ffffff"}
+                strokeOpacity={owned ? 0.4 : isNext ? 0.95 : 0.12}
+                strokeWidth={isNext ? 3 : 2}
+                strokeDasharray={owned ? undefined : "10 8"}
               />
             );
           })}
-          {outposts.map((t) => {
-            const { x, y } = tileCenter(t);
-            return (
-              <g key={`o-${t.i}-${t.j}`} transform={`translate(${x} ${y})`}>
-                <ellipse rx="26" ry="14" fill="#22d3ee" fillOpacity=".25" />
-                <rect x="-3" y="-120" width="6" height="120" fill="url(#beam)" opacity=".8" />
-                <path d="M0 -46 16 -36v20L0 -6l-16-10v-20Z" fill="#0f172a" stroke="#67e8f9" strokeWidth="2.5" />
-                <path d="M0 -40 10 -33v13L0 -13l-10-7v-13Z" fill="#22d3ee" fillOpacity=".7" />
-              </g>
-            );
-          })}
-          <linearGradient id="beam" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0" stopColor="#67e8f9" stopOpacity=".9" />
-            <stop offset="1" stopColor="#67e8f9" stopOpacity="0" />
-          </linearGradient>
           {nextTile && !readOnly && (
             <text
               x={tileCenter(nextTile).x}
-              y={tileCenter(nextTile).y + 6}
+              y={tileCenter(nextTile).y + 7}
               textAnchor="middle"
-              className="fill-amber-300 font-display text-[15px] font-bold"
-              style={{ paintOrder: "stroke", stroke: "#000", strokeWidth: 4 }}
+              className="fill-white font-display text-[19px]"
+              style={{ paintOrder: "stroke", stroke: "#1d1206", strokeWidth: 5 }}
             >
               WIN TO CLAIM
             </text>
           )}
         </svg>
+
+        {outposts.map((t) => {
+          const { x, y } = tileCenter(t);
+          return (
+            <img
+              key={`o-${t.i}-${t.j}`}
+              src="/village/castle.png"
+              alt=""
+              draggable={false}
+              className="base-sprite pointer-events-none absolute drop-shadow-[0_8px_6px_rgba(0,0,0,0.45)]"
+              style={{ ...pct(x, y + GRID.th * 0.28), width: `${(CASTLE_WIDTH / VIEW_W) * 100}%`, zIndex: Math.round(y) }}
+            />
+          );
+        })}
 
         {BUILDINGS.map((b) => {
           const { x, y } = tileCenter(BUILDING_TILES[b.id]);
@@ -201,7 +190,7 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
             <button
               key={b.id}
               className="base-sprite group absolute focus:outline-none"
-              style={{ ...pct(x, y + GRID.th * 0.32), width: `${(width / VIEW_W) * 100}%`, zIndex: Math.round(y) }}
+              style={{ ...pct(x, y + GRID.th * 0.3), width: `${(width / VIEW_W) * 100}%`, zIndex: Math.round(y) }}
               onClick={(e) => {
                 e.stopPropagation();
                 onSelect(isSelected ? null : b.id);
@@ -209,15 +198,18 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
               aria-label={`${b.name} level ${level}`}
             >
               <img
-                src={`/base/${b.key}.png`}
+                src={`/village/${b.key}.png`}
                 alt=""
                 draggable={false}
                 className={`w-full transition duration-200 group-hover:-translate-y-1 ${
                   isSelected
-                    ? "drop-shadow-[0_0_18px_rgba(34,211,238,1)] brightness-110"
-                    : "drop-shadow-[0_10px_10px_rgba(0,0,0,0.55)]"
+                    ? "brightness-110 drop-shadow-[0_0_10px_rgba(255,247,194,1)]"
+                    : "drop-shadow-[0_10px_8px_rgba(0,0,0,0.45)]"
                 }`}
               />
+              <span className="absolute -bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap rounded-md border-2 border-[#1d1206] bg-[linear-gradient(180deg,#b07c45,#7a4f25)] px-1.5 py-px font-display text-[11px] text-white shadow-[0_2px_0_#1d1206] sm:text-xs">
+                <span className="clash-text">Lv {level}</span>
+              </span>
             </button>
           );
         })}
@@ -225,7 +217,7 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
         {!readOnly && pending > 0 && (
           <button
             className="collect-bubble absolute flex -translate-x-1/2 flex-col items-center"
-            style={{ ...pct(tileCenter(BUILDING_TILES[1]).x, tileCenter(BUILDING_TILES[1]).y - 255), zIndex: 1000 }}
+            style={{ ...pct(tileCenter(BUILDING_TILES[1]).x, tileCenter(BUILDING_TILES[1]).y - 215), zIndex: 1000 }}
             onClick={(e) => {
               e.stopPropagation();
               onCollect?.();
@@ -233,16 +225,20 @@ export function World({ levels, land, selected, onSelect, pending, onCollect, co
             disabled={collecting}
             aria-label={`Collect ${pending} gold`}
           >
-            <span className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-amber-200 bg-gradient-to-b from-amber-300/90 to-amber-600/90 shadow-[0_0_20px_rgb(251_191_36/0.9)]">
-              {collecting ? <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" /> : <GoldCoin size={26} />}
+            <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-[#1d1206] bg-[radial-gradient(circle_at_35%_30%,#fffaf0,#f6ead0)] shadow-[0_3px_0_#1d1206]">
+              {collecting ? (
+                <span className="h-5 w-5 animate-spin rounded-full border-[3px] border-[#7a4a00] border-t-transparent" />
+              ) : (
+                <GoldCoin size={28} />
+              )}
             </span>
-            <span className="hud-text mt-0.5 font-display text-xs font-bold">{pending}</span>
+            <span className="clash-text mt-0.5 font-display text-sm">{pending}</span>
           </button>
         )}
         {floatText && (
           <span
-            className="coin-float hud-text pointer-events-none absolute font-display text-xl font-black text-amber-300"
-            style={{ ...pct(tileCenter(BUILDING_TILES[1]).x, tileCenter(BUILDING_TILES[1]).y - 270), zIndex: 1001 }}
+            className="coin-float clash-text pointer-events-none absolute font-display text-2xl text-[#ffd84a]"
+            style={{ ...pct(tileCenter(BUILDING_TILES[1]).x, tileCenter(BUILDING_TILES[1]).y - 230), zIndex: 1001 }}
           >
             {floatText}
           </span>

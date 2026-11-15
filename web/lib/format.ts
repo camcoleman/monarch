@@ -3,6 +3,9 @@ export const shortAddr = (a: string) => `${a.slice(0, 6)}...${a.slice(-4)}`;
 export const usd = (n: number, digits = 2) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits });
 
+/** USD with enough decimals for coins worth fractions of a cent. */
+export const price = (n: number) => usd(n, n >= 100 ? 2 : n >= 1 ? 3 : n >= 0.1 ? 4 : 5);
+
 export const pct = (n: number, digits = 2) => `${n >= 0 ? "+" : ""}${n.toFixed(digits)}%`;
 
 export const signedUsd = (n: number) => `${n >= 0 ? "+" : "-"}${usd(Math.abs(n))}`;

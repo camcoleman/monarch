@@ -24,7 +24,7 @@ const chain = new Chain(config);
 const battles = new BattleManager(io, feed, chain, config);
 
 feed.on("tick", (tick) => {
-  io.emit("price", tick);
+  io.emit("prices", tick);
   battles.onPrice(tick);
 });
 feed.start();
@@ -43,7 +43,7 @@ async function respond<T extends object>(ack: unknown, fn: () => Ack<T> | Promis
 
 io.on("connection", (socket) => {
   socket.emit("price:history", feed.history);
-  if (feed.market) socket.emit("market", feed.market);
+  socket.emit("market", feed.market);
   socket.emit("battles:live", battles.liveSummaries());
   socket.emit("match:queue", { searching: battles.queueSize() });
 
@@ -53,12 +53,11 @@ io.on("connection", (socket) => {
   socket.on("battle:watch", (p, ack) => respond(ack, () => battles.watch(socket, p.battleId)));
   socket.on("battle:join", (p, ack) => respond(ack, () => battles.join(p)));
   socket.on("battle:pick", (p, ack) => respond(ack, () => battles.pick(p)));
+  socket.on("battle:practice", (p, ack) => respond(ack, () => battles.practice(socket, p ?? {})));
   socket.on("disconnect", () => battles.dropSocket(socket.id));
 });
 
-setInterval(() => {
-  if (feed.market) io.emit("market", feed.market);
-}, 5_000);
+setInterval(() => io.emit("market", feed.market), 5_000);
 
 httpServer.listen(config.port, () => {
   console.log(`[server] MONARCH referee listening on :${config.port}`);

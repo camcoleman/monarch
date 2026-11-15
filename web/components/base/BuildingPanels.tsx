@@ -1,17 +1,21 @@
 "use client";
 
-import { ArrowUpCircle, Coins, Info } from "lucide-react";
-import { BUILDINGS, MAX_BUILDING_LEVEL, upgradeCost } from "@monarch/shared";
-import { GoldCoin, HoloModal } from "./ui";
+import { ArrowBigUpDash, Coins, Lock } from "lucide-react";
+import type { ReactNode } from "react";
+import { ASSETS, BUILDINGS, MAX_BUILDING_LEVEL, upgradeCost } from "@monarch/shared";
+import { AssetCoin, ClashModal, GoldCoin, RoundButton } from "./ui";
 
 export function upgradeBlocker(buildingId: number, levels: number[], gold: number): string | null {
   const level = levels[buildingId];
   if (level >= MAX_BUILDING_LEVEL) return "Max level";
-  if (buildingId !== 0 && level >= levels[0]) return `Needs Command Center Lv ${level + 1}`;
+  if (buildingId !== 0 && level >= levels[0]) return `Needs Town Hall ${level + 1}`;
   const cost = upgradeCost(buildingId, level);
   if (gold < cost) return `Need ${cost - gold} more gold`;
   return null;
 }
+
+/** The coin the next Town Hall level unlocks, if any. */
+const nextUnlock = (townHall: number) => ASSETS.find((a) => a.unlock === townHall + 1) ?? null;
 
 /** Bottom-center action row for the selected building, like Clash of Clans. */
 export function BuildingActionBar({
@@ -41,71 +45,39 @@ export function BuildingActionBar({
 
   return (
     <div className="pop-in pointer-events-auto flex flex-col items-center gap-2">
-      <p className="hud-text font-display text-base font-bold sm:text-lg">
-        {b.name} <span className="text-cyan-200">(Level {level})</span>
+      <p className="clash-text font-display text-xl sm:text-2xl">
+        {b.name} <span className="text-[#ffd84a]">(Level {level})</span>
       </p>
       <div className="flex items-start gap-3">
-        <ActionButton label="Info" onClick={onInfo}>
-          <Info size={26} />
-        </ActionButton>
+        <RoundButton label="Info" onClick={onInfo} tone="blue">
+          <span className="font-display text-3xl">i</span>
+        </RoundButton>
         {buildingId === 1 && (
-          <ActionButton label={`Collect ${pending}`} onClick={onCollect} disabled={pending === 0 || !!busy} tone="gold">
-            <Coins size={26} />
-          </ActionButton>
+          <RoundButton label={`Collect ${pending}`} onClick={onCollect} disabled={pending === 0 || !!busy} tone="gold">
+            <Coins size={32} strokeWidth={2.5} />
+          </RoundButton>
         )}
         {!maxed && (
-          <ActionButton
-            label={upgrading ? "Building..." : blocker ?? "Upgrade"}
-            onClick={onUpgrade}
-            disabled={!!blocker || !!busy}
-            tone="gold"
-            badge={
-              <span className="flex items-center gap-1 font-display text-xs font-bold">
-                {upgradeCost(buildingId, level)} <GoldCoin size={14} />
-              </span>
-            }
-          >
-            {upgrading ? (
-              <span className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            ) : (
-              <ArrowUpCircle size={28} />
-            )}
-          </ActionButton>
+          <div className="relative">
+            <span className="hud-pill absolute -top-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 whitespace-nowrap px-2 py-0.5">
+              <span className="clash-text font-display text-xs">{upgradeCost(buildingId, level)}</span> <GoldCoin size={14} />
+            </span>
+            <RoundButton
+              label={upgrading ? "Building..." : blocker ?? "Upgrade"}
+              onClick={onUpgrade}
+              disabled={!!blocker || !!busy}
+              tone="green"
+            >
+              {upgrading ? (
+                <span className="h-7 w-7 animate-spin rounded-full border-[3px] border-white border-t-transparent" />
+              ) : (
+                <ArrowBigUpDash size={36} strokeWidth={2.5} />
+              )}
+            </RoundButton>
+          </div>
         )}
       </div>
     </div>
-  );
-}
-
-function ActionButton({
-  label,
-  onClick,
-  disabled,
-  tone = "neon",
-  badge,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  tone?: "neon" | "gold";
-  badge?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const colors =
-    tone === "gold"
-      ? "border-amber-300/80 text-amber-200 shadow-[0_0_20px_-4px_rgb(251_191_36/0.8)]"
-      : "border-neon/70 text-neon shadow-[0_0_20px_-4px_rgb(34_211_238/0.8)]";
-  return (
-    <button onClick={onClick} disabled={disabled} className="group flex w-20 flex-col items-center gap-1 disabled:opacity-50">
-      <span
-        className={`relative flex h-16 w-16 items-center justify-center rounded-full border-2 bg-gradient-to-b from-slate-800 to-slate-950 transition group-enabled:group-hover:scale-105 ${colors}`}
-      >
-        {children}
-        {badge && <span className="absolute -top-2 rounded-full bg-black/80 px-1.5 py-0.5 text-amber-200">{badge}</span>}
-      </span>
-      <span className="hud-text text-center text-[11px] font-bold leading-tight">{label}</span>
-    </button>
   );
 }
 
@@ -113,36 +85,68 @@ export function BuildingInfoModal({ buildingId, levels, onClose }: { buildingId:
   const b = BUILDINGS[buildingId];
   const level = levels[buildingId];
   return (
-    <HoloModal title={b.name} onClose={onClose}>
+    <ClashModal title={`${b.name} (Level ${level})`} onClose={onClose}>
       <div className="space-y-4">
         <div className="flex items-center gap-4">
-          <img src={`/base/${b.key}.png`} alt="" className="h-28 w-28 object-contain drop-shadow-[0_0_14px_rgb(34_211_238/0.5)]" />
-          <div className="space-y-1">
-            <p className="font-display text-sm text-cyan-200">
-              Level {level} / {MAX_BUILDING_LEVEL}
-            </p>
-            <div className="flex gap-1">
-              {Array.from({ length: MAX_BUILDING_LEVEL }, (_, i) => (
-                <span key={i} className={`h-2 w-6 skew-x-[-20deg] ${i < level ? "bg-neon shadow-[0_0_8px_#22d3ee]" : "bg-edge"}`} />
-              ))}
-            </div>
-            <p className="text-sm text-zinc-300">{b.description}</p>
+          <img src={`/village/${b.key}.png`} alt="" className="h-28 w-28 object-contain drop-shadow-[0_6px_4px_rgb(0_0_0/0.35)]" />
+          <div className="space-y-2">
+            <LevelPips level={level} />
+            <p className="text-sm">{b.description}</p>
           </div>
         </div>
         <div className="grid gap-2 text-sm">
           <Stat label="Now" value={b.effect(level)} />
           {level < MAX_BUILDING_LEVEL && <Stat label={`Level ${level + 1}`} value={b.effect(level + 1)} highlight />}
         </div>
+        {buildingId === 0 && <AssetUnlocks townHall={level} />}
       </div>
-    </HoloModal>
+    </ClashModal>
   );
 }
 
-function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+/** Every coin and the Town Hall level that unlocks it. */
+export function AssetUnlocks({ townHall }: { townHall: number }) {
   return (
-    <div className={`flex justify-between rounded-xl border px-3 py-2 ${highlight ? "border-amber-300/40 bg-amber-300/5" : "border-edge"}`}>
-      <span className="text-zinc-400">{label}</span>
-      <span className={highlight ? "text-amber-200" : "text-zinc-100"}>{value}</span>
+    <div className="space-y-2">
+      <p className="font-display text-base">Tradable coins</p>
+      <div className="grid grid-cols-5 gap-2">
+        {ASSETS.map((a) => {
+          const locked = a.unlock > townHall;
+          return (
+            <div key={a.id} className={`well flex flex-col items-center gap-1 py-2 ${locked ? "opacity-70" : ""}`}>
+              <span className="relative">
+                <AssetCoin asset={a.id} size={34} locked={locked} />
+                {locked && (
+                  <Lock size={16} strokeWidth={3} className="absolute -bottom-1 -right-1 rounded-full bg-ink p-0.5 text-white" />
+                )}
+              </span>
+              <span className="text-[11px] font-extrabold">{locked ? `TH ${a.unlock}` : a.id}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function LevelPips({ level }: { level: number }) {
+  return (
+    <div className="flex gap-1">
+      {Array.from({ length: MAX_BUILDING_LEVEL }, (_, i) => (
+        <span
+          key={i}
+          className={`h-3 w-6 rounded-sm border-2 border-[#1d1206] ${i < level ? "bg-[linear-gradient(180deg,#fff3a0,#ffbf1f)]" : "bg-[#d9c290]"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function Stat({ label, value, highlight }: { label: string; value: ReactNode; highlight?: boolean }) {
+  return (
+    <div className={`flex justify-between gap-3 rounded-xl border-2 px-3 py-2 ${highlight ? "border-up/60 bg-[#e3f5c8]" : "border-[#c9ac6c] bg-[#efdfb8]"}`}>
+      <span className="text-muted">{label}</span>
+      <span className={`text-right font-extrabold ${highlight ? "text-up" : ""}`}>{value}</span>
     </div>
   );
 }
@@ -161,38 +165,53 @@ export function ShopModal({
   onUpgrade: (id: number) => void;
   onClose: () => void;
 }) {
+  const unlock = nextUnlock(levels[0]);
   return (
-    <HoloModal title="Upgrades" onClose={onClose} wide>
+    <ClashModal title="Shop" onClose={onClose} wide>
+      <div className="mb-3 flex items-center justify-center gap-2 font-display text-lg">
+        <GoldCoin size={22} /> {gold.toLocaleString()}
+      </div>
       <div className="grid gap-3 sm:grid-cols-2">
         {BUILDINGS.map((b) => {
           const level = levels[b.id];
           const blocker = upgradeBlocker(b.id, levels, gold);
           return (
-            <div key={b.id} className="rounded-2xl border border-neon/20 bg-slate-950/50 p-3">
+            <div key={b.id} className="well p-3">
               <div className="flex gap-3">
-                <img src={`/base/${b.key}.png`} alt="" className="h-20 w-20 object-contain" />
+                <img src={`/village/${b.key}.png`} alt="" className="h-20 w-20 object-contain drop-shadow-[0_4px_3px_rgb(0_0_0/0.3)]" />
                 <div className="min-w-0 flex-1">
-                  <p className="font-display text-sm font-bold">{b.name}</p>
-                  <p className="text-xs text-cyan-200">Level {level}</p>
-                  <p className="mt-1 text-xs text-zinc-400">{b.effect(level)}</p>
+                  <p className="font-display text-lg leading-tight">{b.name}</p>
+                  <p className="text-xs font-extrabold text-muted">Level {level}</p>
+                  <p className="mt-1 text-xs">{b.effect(level)}</p>
+                  {b.id === 0 && unlock && (
+                    <p className="mt-1 flex items-center gap-1 text-xs font-extrabold text-up">
+                      Next level unlocks <AssetCoin asset={unlock.id} size={18} /> {unlock.name}
+                    </p>
+                  )}
                 </div>
               </div>
               {level < MAX_BUILDING_LEVEL ? (
                 <button
-                  className="btn-gold mt-3 w-full gap-1 text-sm"
+                  className="btn-green mt-3 w-full text-base"
                   disabled={!!blocker || !!busy}
                   onClick={() => onUpgrade(b.id)}
                   title={blocker ?? undefined}
                 >
-                  {busy === `upgrade-${b.id}` ? "Building..." : blocker ?? <>Upgrade · {upgradeCost(b.id, level)} <GoldCoin size={16} /></>}
+                  {busy === `upgrade-${b.id}` ? (
+                    "Building..."
+                  ) : blocker ?? (
+                    <>
+                      Upgrade {upgradeCost(b.id, level)} <GoldCoin size={18} />
+                    </>
+                  )}
                 </button>
               ) : (
-                <p className="mt-3 text-center font-display text-xs text-neon">MAX LEVEL</p>
+                <p className="mt-3 text-center font-display text-base text-up">Max level</p>
               )}
             </div>
           );
         })}
       </div>
-    </HoloModal>
+    </ClashModal>
   );
 }

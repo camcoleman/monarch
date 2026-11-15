@@ -1,73 +1,123 @@
+"use client";
+
+import { Bot, ChartCandlestick, Trophy } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { ASSETS } from "@monarch/shared";
 import { RegisterCard } from "@/components/RegisterCard";
+import { AssetCoin } from "@/components/base/ui";
+import { useMe } from "@/hooks/useMonarch";
+import { friendlyError } from "@/lib/errors";
+import { startPractice } from "@/lib/practice";
 
 const FEATURES = [
   {
-    href: "/trade",
-    title: "Train",
-    body: "Practice with $10,000 of virtual USD. Go long or short on BTC with up to 10x leverage on live prices.",
+    img: "/village/goldmine.png",
+    title: "Build",
+    body: "Mine gold and upgrade your Town Hall, Gold Mine, Barracks and Trophy Hall - every upgrade is on-chain.",
   },
   {
-    href: "/leaderboard",
+    img: "/village/barracks.png",
     title: "Attack",
-    body: "Hit Attack to get matched with a rival for a 90-second BTC battle. Same entry, one call, highest return wins.",
+    body: "Get matched with a rival for a 90-second trading battle. Pick a coin, go long or short, highest return wins.",
   },
   {
-    href: "/leaderboard",
-    title: "Expand",
-    body: "Victories claim new territory for your base, loot 10% of your rival's gold, and climb you up the leagues.",
+    img: "/village/castle.png",
+    title: "Conquer",
+    body: "Victories claim new territory, loot 10% of your rival's gold, and push you up the leagues.",
   },
 ];
 
 const STEPS = [
-  "Connect a wallet on Monad Testnet and claim your base.",
-  "Collect gold from your Extractor and upgrade your buildings.",
+  "Connect a wallet on Monad Testnet and build your village.",
+  "Collect gold from your Gold Mine and upgrade your buildings.",
+  "Each Town Hall level unlocks a new coin: BTC, then ETH, SOL, DOGE and MON.",
   "Hit Attack - matchmaking finds you an opponent.",
-  "Pick long or short and leverage (your Mech Bay sets the max).",
-  "Survive 90 seconds of live BTC moves. Highest return wins.",
-  "Winners gain territory, gold and trophies - all settled on Monad.",
+  "Pick a coin, long or short, and leverage (your Barracks sets the max).",
+  "Survive 90 seconds of live prices. Winners take land, gold and trophies on Monad.",
 ];
 
 export function Landing() {
+  const router = useRouter();
+  const me = useMe();
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const demo = async () => {
+    setStarting(true);
+    setError(null);
+    try {
+      router.push(`/battle/${await startPractice(me.address)}`);
+    } catch (err) {
+      setError(friendlyError(err));
+      setStarting(false);
+    }
+  };
+
   return (
-    <div className="space-y-12">
-      <section className="grid items-center gap-8 pt-6 md:grid-cols-[1.3fr_1fr]">
+    <div className="space-y-10">
+      <section className="grid items-center gap-8 pt-4 md:grid-cols-[1.3fr_1fr]">
         <div className="space-y-5">
-          <p className="font-display text-xs uppercase tracking-[0.4em] text-neon">Built on Monad</p>
-          <h1 className="font-display text-5xl font-black leading-tight md:text-6xl">
-            Trade. <span className="text-gold drop-shadow-[0_0_20px_rgb(251_191_36/0.5)]">Conquer.</span> Rule.
+          <p className="clash-text font-display text-lg text-[#ffd84a]">Built on Monad</p>
+          <h1 className="clash-text font-display text-6xl leading-none md:text-7xl">
+            Trade. <span className="text-[#ffd84a]">Conquer.</span> Rule.
           </h1>
-          <p className="max-w-xl text-lg text-zinc-400">
-            MONARCH is a futuristic base-builder powered by real BTC trading battles. Build your base, beat rivals with
-            your market calls, and expand your territory on-chain.
+          <p className="clash-text max-w-xl font-display text-xl leading-snug">
+            Build your village, beat rivals with your market calls, and expand your territory on-chain.
           </p>
-          <div className="flex gap-3">
-            <Link href="/trade" className="btn-neon">
-              Practice trading
+          <div className="flex flex-wrap gap-3">
+            <button className="btn-red px-6 py-3 text-2xl" disabled={starting} onClick={demo}>
+              <Bot size={26} strokeWidth={3} /> {starting ? "Starting..." : "Try a demo battle"}
+            </button>
+            <Link href="/trade" className="btn-blue px-5 py-3 text-xl">
+              <ChartCandlestick size={22} strokeWidth={3} /> Practice trading
             </Link>
-            <Link href="/leaderboard" className="btn-ghost">
-              See rankings
+            <Link href="/leaderboard" className="btn-ghost px-5 py-3 text-xl">
+              <Trophy size={22} strokeWidth={3} /> Rankings
             </Link>
           </div>
+          <p className="clash-text font-display text-sm">The demo battle is free: no wallet needed, you vs the Training Bot on live prices.</p>
+          {error && <p className="panel inline-block px-3 py-1 text-sm font-bold text-down">{error}</p>}
+          <div className="flex items-center gap-2">
+            {ASSETS.map((a) => (
+              <AssetCoin key={a.id} asset={a.id} size={38} />
+            ))}
+          </div>
         </div>
-        <RegisterCard />
+        <div className="relative">
+          <img
+            src="/village/townhall.png"
+            alt=""
+            className="mx-auto -mb-6 w-56 drop-shadow-[0_14px_10px_rgb(0_0_0/0.45)] md:w-64"
+          />
+          <RegisterCard />
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
         {FEATURES.map((f) => (
-          <Link key={f.title} href={f.href} className="panel p-5 transition hover:border-neon/60">
-            <h3 className="font-display text-lg font-bold uppercase tracking-wider text-neon">{f.title}</h3>
-            <p className="mt-2 text-sm text-zinc-400">{f.body}</p>
-          </Link>
+          <div key={f.title} className="panel flex items-center gap-4 p-4">
+            <img src={f.img} alt="" className="h-20 w-20 shrink-0 object-contain drop-shadow-[0_5px_4px_rgb(0_0_0/0.35)]" />
+            <div>
+              <h3 className="font-display text-2xl">{f.title}</h3>
+              <p className="mt-1 text-sm">{f.body}</p>
+            </div>
+          </div>
         ))}
       </section>
 
-      <section className="panel p-6">
-        <h2 className="font-display text-xl font-bold uppercase tracking-wider">How it works</h2>
-        <ol className="mt-4 grid gap-3 md:grid-cols-2">
+      <section className="panel overflow-hidden">
+        <div className="wood-header px-6 py-3">
+          <h2 className="clash-text font-display text-2xl">How it works</h2>
+        </div>
+        <ol className="grid gap-3 p-6 md:grid-cols-2">
           {STEPS.map((s, i) => (
-            <li key={s} className="flex gap-3 text-zinc-300">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-neon/40 bg-neon/10 font-display text-sm font-bold text-neon">
+            <li key={s} className="flex items-center gap-3">
+              <span
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-[3px] border-[#1d1206] bg-[linear-gradient(180deg,#bfeaff,#3aa2ec)] font-display text-lg text-white"
+                style={{ textShadow: "0 2px 0 #1d1206" }}
+              >
                 {i + 1}
               </span>
               {s}

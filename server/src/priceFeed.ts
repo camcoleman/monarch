@@ -1,58 +1,62 @@
 import { EventEmitter } from "node:events";
-import type { MarketStats, PriceTick } from "@monarch/shared";
+import { ASSETS, type AssetId, type AssetPrices, type MarketStats, type PriceTick, type PricesTick } from "@monarch/shared";
 
 const COINBASE_WS = "wss://ws-feed.exchange.coinbase.com";
 const TICK_MS = 500;
 const HISTORY_SIZE = 600;
 const STALE_MS = 15_000;
-const MOCK_START_PRICE = 97_000;
 const MOCK_VOLATILITY = 0.0004;
 
+const byProduct = new Map<string, AssetId>(ASSETS.map((a) => [a.product, a.id]));
+const round = (p: number) => Number(p.toPrecision(8));
+
 /**
- * Single source of BTC prices. Emits "tick" every TICK_MS with the latest price so
- * every client and battle sees the exact same numbers.
+ * Single source of prices for every tradable asset. Emits "tick" every TICK_MS with the
+ * latest prices so every client and battle sees the exact same numbers.
  */
-export class PriceFeed extends EventEmitter<{ tick: [PriceTick] }> {
-  private price: number | null = null;
+export class PriceFeed extends EventEmitter<{ tick: [PricesTick] }> {
+  private readonly prices: AssetPrices = {};
   private lastMessageAt = 0;
-  readonly history: PriceTick[] = [];
-  market: MarketStats | null = null;
+  readonly history: Partial<Record<AssetId, PriceTick[]>> = {};
+  readonly market: Partial<Record<AssetId, MarketStats>> = {};
+  latest: PricesTick | null = null;
 
   constructor(private readonly mode: "live" | "mock") {
     super();
   }
 
-  get latest(): PriceTick | null {
-    return this.history.at(-1) ?? null;
-  }
-
   start() {
     if (this.mode === "mock") {
-      this.price = MOCK_START_PRICE;
+      for (const a of ASSETS) {
+        this.prices[a.id] = a.mockStart;
+        this.market[a.id] = { open24h: a.mockStart, high24h: a.mockStart, low24h: a.mockStart, volume24h: 12_345 };
+      }
       console.log("[price] mock random-walk mode");
     } else {
       this.connectLive();
     }
 
     setInterval(() => {
-      if (this.mode === "mock" && this.price !== null) {
-        this.price *= 1 + gaussian() * MOCK_VOLATILITY;
+      const t = Date.now();
+      const p: AssetPrices = {};
+      for (const a of ASSETS) {
+        let price = this.prices[a.id];
+        if (price === undefined) continue;
+        if (this.mode === "mock") {
+          price *= 1 + gaussian() * MOCK_VOLATILITY;
+          this.prices[a.id] = price;
+          const m = this.market[a.id]!;
+          m.high24h = Math.max(m.high24h, price);
+          m.low24h = Math.min(m.low24h, price);
+        }
+        p[a.id] = round(price);
+        const h = (this.history[a.id] ??= []);
+        h.push({ p: p[a.id]!, t });
+        if (h.length > HISTORY_SIZE) h.shift();
       }
-      if (this.price === null) return;
-      if (this.mode === "mock") {
-        const m = (this.market ??= {
-          open24h: MOCK_START_PRICE,
-          high24h: this.price,
-          low24h: this.price,
-          volume24h: 12_345,
-        });
-        m.high24h = Math.max(m.high24h, this.price);
-        m.low24h = Math.min(m.low24h, this.price);
-      }
-      const tick = { p: Math.round(this.price * 100) / 100, t: Date.now() };
-      this.history.push(tick);
-      if (this.history.length > HISTORY_SIZE) this.history.shift();
-      this.emit("tick", tick);
+      if (Object.keys(p).length === 0) return;
+      this.latest = { t, p };
+      this.emit("tick", this.latest);
     }, TICK_MS);
   }
 
@@ -61,9 +65,9 @@ export class PriceFeed extends EventEmitter<{ tick: [PriceTick] }> {
     let watchdog: NodeJS.Timeout | undefined;
 
     ws.onopen = () => {
-      console.log("[price] connected to Coinbase BTC-USD");
+      console.log(`[price] connected to Coinbase ${ASSETS.map((a) => a.product).join(", ")}`);
       this.lastMessageAt = Date.now();
-      ws.send(JSON.stringify({ type: "subscribe", product_ids: ["BTC-USD"], channels: ["ticker"] }));
+      ws.send(JSON.stringify({ type: "subscribe", product_ids: ASSETS.map((a) => a.product), channels: ["ticker"] }));
       watchdog = setInterval(() => {
         if (Date.now() - this.lastMessageAt > STALE_MS) {
           console.warn("[price] feed stale, reconnecting");
@@ -76,9 +80,10 @@ export class PriceFeed extends EventEmitter<{ tick: [PriceTick] }> {
       this.lastMessageAt = Date.now();
       try {
         const msg = JSON.parse(String(event.data));
-        if (msg.type === "ticker" && msg.price) {
-          this.price = Number(msg.price);
-          this.market = {
+        const asset = byProduct.get(msg.product_id);
+        if (msg.type === "ticker" && msg.price && asset) {
+          this.prices[asset] = Number(msg.price);
+          this.market[asset] = {
             open24h: Number(msg.open_24h),
             high24h: Number(msg.high_24h),
             low24h: Number(msg.low_24h),

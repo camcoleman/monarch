@@ -25,9 +25,9 @@ export function RegisterCard({ compact = false }: { compact?: boolean }) {
     if (compact) return null;
     return (
       <div className="panel p-5">
-        <p className="text-sm text-zinc-400">Welcome back,</p>
-        <p className="font-display text-2xl text-gold">{player.name}</p>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="text-sm text-muted">Welcome back,</p>
+        <p className="font-display text-3xl">{player.name}</p>
+        <p className="mt-2 text-sm font-bold text-muted">
           🏆 {player.trophies} trophies · {player.gold} gold · {player.land} land · {player.wins}W/{player.losses}L
         </p>
       </div>
@@ -35,21 +35,21 @@ export function RegisterCard({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div className="panel space-y-3 p-5">
-      <h3 className="font-display text-xl text-gold">Claim your base</h3>
+    <div className="panel relative space-y-3 p-5">
+      <h3 className="font-display text-3xl">Build your village</h3>
       {!isConnected ? (
         <>
-          <p className="text-sm text-zinc-400">Connect a wallet on Monad Testnet to start building.</p>
+          <p className="text-sm text-muted">Connect a wallet on Monad Testnet to start building.</p>
           <ConnectButton />
         </>
       ) : chainId !== monadTestnet.id ? (
-        <button className="btn-gold" disabled={switching} onClick={() => switchChain({ chainId: monadTestnet.id })}>
+        <button className="btn-blue" disabled={switching} onClick={() => switchChain({ chainId: monadTestnet.id })}>
           Switch to Monad Testnet
         </button>
       ) : !MONARCH_ADDRESS ? (
-        <p className="text-sm text-zinc-400">Waiting for the contract address to be configured.</p>
+        <p className="text-sm text-muted">Waiting for the contract address to be configured.</p>
       ) : isLoading ? (
-        <p className="text-sm text-zinc-400">Checking registration...</p>
+        <p className="text-sm text-muted">Checking registration...</p>
       ) : (
         <form
           className="flex flex-col gap-2 sm:flex-row"
@@ -71,15 +71,15 @@ export function RegisterCard({ compact = false }: { compact?: boolean }) {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          <button className="btn-gold" disabled={!name.trim() || isPending || receipt.isLoading}>
-            {isPending ? "Confirm in wallet..." : receipt.isLoading ? "Deploying base..." : "Register"}
+          <button className="btn-green text-lg" disabled={!name.trim() || isPending || receipt.isLoading}>
+            {isPending ? "Confirm in wallet..." : receipt.isLoading ? "Building..." : "Build"}
           </button>
         </form>
       )}
-      {error && <p className="text-sm text-red-400">{friendlyError(error)}</p>}
-      <p className="text-xs text-zinc-500">
+      {error && <p className="text-sm font-bold text-down">{friendlyError(error)}</p>}
+      <p className="text-xs font-bold text-muted">
         Need gas?{" "}
-        <a className="text-royal underline" href={FAUCET_URL} target="_blank" rel="noreferrer">
+        <a className="text-sky underline" href={FAUCET_URL} target="_blank" rel="noreferrer">
           Get testnet MON from the faucet
         </a>
         .

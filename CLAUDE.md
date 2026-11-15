@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-MONARCH is a BTC paper-trading game on Monad Testnet (chain ID 10143): players win 90-second 1v1 trading battles to capture US states. It is a pnpm workspace (`shared`, `server`, `web`) plus a Foundry project (`contracts`). README.md covers deploy steps, local Anvil setup, and game rules.
+MONARCH is a Clash of Clans style crypto trading game on Monad Testnet (chain ID 10143): players build a village and win 90-second 1v1 trading battles for gold, trophies and territory. The Town Hall level unlocks tradable coins (`ASSETS` in `shared`). It is a pnpm workspace (`shared`, `server`, `web`) plus a Foundry project (`contracts`). README.md covers deploy steps, local Anvil setup, and game rules.
 
 ## Commands
 
@@ -33,8 +33,8 @@ Coinbase WS -> server (PriceFeed -> BattleManager -> Chain) -> Monarch.sol
 - **`shared/src/abi.ts` is generated.** Never hand-edit it; change `contracts/src/Monarch.sol` and run `pnpm abi` (runs `forge inspect Monarch abi`).
 - **State IDs must stay in sync** across `STATE_COUNT` in `Monarch.sol`, the `STATES` array in `shared` (array index = on-chain ID; `fips` maps to us-atlas features for the map), and the README.
 - **Server is the trusted referee** (`server/src/`):
-  - `priceFeed.ts` — single price source; emits a `tick` every 500 ms so every client and battle sees identical prices. `PRICE_MODE=mock` swaps Coinbase for a random walk.
-  - `battles.ts` — `BattleManager` holds all battles in memory (lost on restart). Phases: `lobby` → `picking` → `live` → `ended`. Picks are hidden from `BattleView` until `live`; unpicked players default to long 1x. Ties go to the defender (or creator if neutral). Lobbies expire after 5 min, ended battles are dropped after 30 min. On-chain battle ID is `keccak256(toHex(id))`.
+  - `priceFeed.ts` — single price source for every coin in `ASSETS` (one Coinbase subscription); emits a multi-asset `tick` every 500 ms so every client and battle sees identical prices. `PRICE_MODE=mock` swaps Coinbase for a random walk.
+  - `battles.ts` — `BattleManager` holds all battles in memory (lost on restart). Phases: `lobby` → `picking` → `live` → `ended`. Picks are hidden from `BattleView` until `live`; Each pick is an asset, side and leverage; the asset must be in the player's Town Hall unlocks, and returns use that asset's entry price. Unpicked players default to long BTC 1x. `mode: "practice"` battles (`battle:practice`) pit a player or guest against `BOT_PLAYER`, unlock everything, skip signatures, never settle, and are hidden from the live feed and matchmaking. Ties go to the defender (or creator if neutral). Lobbies expire after 5 min, ended battles are dropped after 30 min. On-chain battle ID is `keccak256(toHex(id))`.
   - `chain.ts` — viem reads (`players`, `stateOwner`) and `settleBattle` writes. Settlements are serialized through a promise queue to avoid nonce races, with one retry. With no `CONTRACT_ADDRESS`, `getPlayerName` returns `undefined` (registration check skipped) and settlement is disabled, so battles still run off-chain.
   - `index.ts` — wires Socket.IO handlers through `respond()`, which always answers the ack even if a handler throws. Also serves `GET /health`.
 - **Contract rules the server mirrors:** only the referee can settle; both players must be registered; an owned state can only change hands in a battle including its current owner (`OwnerNotInBattle`). The server pre-checks the same rules on create/join so failures surface before a battle runs.

@@ -13,7 +13,7 @@ export interface PlayerData {
   wins: number;
   losses: number;
   land: number;
-  /** Unix seconds of the last Extractor collection. */
+  /** Unix seconds of the last Gold Mine collection. */
   lastCollect: number;
 }
 
@@ -46,7 +46,7 @@ export function usePlayer(address?: string) {
   return { player, isLoading: query.isLoading, refetch: query.refetch };
 }
 
-/** Building levels indexed by building ID (Command Center, Extractor, Mech Bay, Trophy Vault). */
+/** Building levels indexed by building ID (Town Hall, Gold Mine, Barracks, Trophy Hall). */
 export function useBuildings(address?: string) {
   const query = useReadContract({
     ...base,
@@ -58,7 +58,7 @@ export function useBuildings(address?: string) {
   return { levels, refetch: query.refetch };
 }
 
-/** Uncollected Extractor gold, ticking up locally between chain reads. */
+/** Uncollected Gold Mine gold, ticking up locally between chain reads. */
 export function pendingGold(player: PlayerData | null, extractorLevel: number, nowMs: number) {
   if (!player) return 0;
   const minutes = Math.max(0, nowMs / 1000 - player.lastCollect) / 60;
