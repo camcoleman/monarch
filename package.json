@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "pnpm -r --parallel --filter ./server --filter ./web dev",
     "dev:server": "pnpm --filter ./server dev",
+    "start": "pnpm --filter ./server start",
     "dev:web": "pnpm --filter ./web dev",
     "build:web": "pnpm --filter ./web build",
     "typecheck": "pnpm -r typecheck",
