@@ -36,6 +36,49 @@ export const ARENA_MAX_LEVERAGE = 5;
 export const TROPHIES_PER_WIN = 25;
 export const GOLD_PER_WIN = 100;
 
+export const STARTING_GOLD = 200;
+export const MAX_BUILDING_LEVEL = 5;
+export const MINE_BONUS_PER_LEVEL = 20;
+
+/** Index is the on-chain building ID. Upgrade cost to level N is baseCost * N. */
+export const BUILDINGS = [
+  {
+    id: 0,
+    key: "townhall",
+    name: "Town Hall",
+    baseCost: 100,
+    description: "The heart of your kingdom. Other buildings can't be upgraded past its level.",
+  },
+  {
+    id: 1,
+    key: "goldmine",
+    name: "Gold Mine",
+    baseCost: 60,
+    description: `Each level above 1 adds +${MINE_BONUS_PER_LEVEL} gold to every battle victory.`,
+  },
+  {
+    id: 2,
+    key: "barracks",
+    name: "Barracks",
+    baseCost: 50,
+    description: "Where your traders train. A symbol of military might.",
+  },
+  {
+    id: 3,
+    key: "trophyhall",
+    name: "Trophy Hall",
+    baseCost: 80,
+    description: "Displays your conquests and trophies for all rivals to see.",
+  },
+] as const;
+
+export type BuildingInfo = (typeof BUILDINGS)[number];
+
+export const upgradeCost = (buildingId: number, currentLevel: number) =>
+  BUILDINGS[buildingId].baseCost * (currentLevel + 1);
+
+export const goldPerWin = (mineLevel: number) => GOLD_PER_WIN + MINE_BONUS_PER_LEVEL * Math.max(0, mineLevel - 1);
+
 export type Side = "long" | "short";
 
 /** Leveraged return in percent, floored at -100 (liquidation). */
@@ -104,20 +147,46 @@ export interface BattleTick {
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
+/** How long a signed create request stays valid. */
+export const SIGNATURE_TTL_MS = 5 * 60_000;
+
+/** Messages players sign with their wallet so the referee knows each action is really theirs. */
+export const signedMessage = {
+  create: (stateId: number, timestamp: number) =>
+    `MONARCH: declare war on ${STATES[stateId]?.name ?? stateId}\nstate:${stateId}\nat:${timestamp}`,
+  join: (battleId: string) => `MONARCH: accept battle\nbattle:${battleId}`,
+  pick: (battleId: string, side: Side, leverage: number) =>
+    `MONARCH: lock in ${side} ${leverage}x\nbattle:${battleId}`,
+};
+
+export interface CreateBattlePayload {
+  stateId: number;
+  address: string;
+  name: string;
+  timestamp: number;
+  signature: string;
+}
+
+export interface JoinBattlePayload {
+  battleId: string;
+  address: string;
+  name: string;
+  signature: string;
+}
+
+export interface PickPayload {
+  battleId: string;
+  address: string;
+  side: Side;
+  leverage: number;
+  signature: string;
+}
+
 export interface ClientToServerEvents {
-  "battle:create": (
-    p: { stateId: number; address: string; name: string },
-    ack: (r: Ack<{ battleId: string }>) => void
-  ) => void;
+  "battle:create": (p: CreateBattlePayload, ack: (r: Ack<{ battleId: string }>) => void) => void;
   "battle:watch": (p: { battleId: string }, ack: (r: Ack<{ battle: BattleView }>) => void) => void;
-  "battle:join": (
-    p: { battleId: string; address: string; name: string },
-    ack: (r: Ack) => void
-  ) => void;
-  "battle:pick": (
-    p: { battleId: string; address: string; side: Side; leverage: number },
-    ack: (r: Ack) => void
-  ) => void;
+  "battle:join": (p: JoinBattlePayload, ack: (r: Ack) => void) => void;
+  "battle:pick": (p: PickPayload, ack: (r: Ack) => void) => void;
 }
 
 export interface ServerToClientEvents {

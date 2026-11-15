@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { STATES } from "@monarch/shared";
 import { useMe, usePlayers, useStateOwners } from "@/hooks/useMonarch";
@@ -59,7 +60,9 @@ export default function LeaderboardPage() {
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ background: ownerColor(p.address) }} />
-                    <span className="font-semibold">{p.name}</span>
+                    <Link href={`/kingdom/${p.address}`} className="font-semibold hover:text-gold">
+                      {p.name}
+                    </Link>
                     <span className="font-mono text-xs text-zinc-500">{shortAddr(p.address)}</span>
                   </span>
                 </td>

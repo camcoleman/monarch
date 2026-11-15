@@ -3,18 +3,22 @@ import type { Server, Socket } from "socket.io";
 import { isAddress, keccak256, toHex, type Hex } from "viem";
 import {
   ARENA_MAX_LEVERAGE,
+  SIGNATURE_TTL_MS,
   STATES,
   computeReturnPct,
+  signedMessage,
   type Ack,
   type BattlePhase,
   type BattleSummary,
   type BattleView,
   type ClientToServerEvents,
+  type CreateBattlePayload,
+  type JoinBattlePayload,
   type Pick,
+  type PickPayload,
   type PlayerRef,
   type PriceTick,
   type ServerToClientEvents,
-  type Side,
 } from "@monarch/shared";
 import { errMessage, type Chain } from "./chain";
 import type { Config } from "./config";
@@ -23,6 +27,7 @@ import type { PriceFeed } from "./priceFeed";
 type IO = Server<ClientToServerEvents, ServerToClientEvents>;
 type ClientSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
+const BAD_SIGNATURE = "Wallet signature didn't match this address";
 const ENDED_TTL_MS = 30 * 60_000;
 const LOBBY_TTL_MS = 5 * 60_000;
 
@@ -65,10 +70,16 @@ export class BattleManager {
     private readonly config: Config
   ) {}
 
-  async create(p: { stateId: number; address: string; name: string }): Promise<Ack<{ battleId: string }>> {
+  async create(p: CreateBattlePayload): Promise<Ack<{ battleId: string }>> {
     if (!STATES[p.stateId]) return fail("Unknown state");
     if (!isAddress(p.address)) return fail("Invalid address");
     const address = p.address.toLowerCase();
+    if (!Number.isFinite(p.timestamp) || Math.abs(Date.now() - p.timestamp) > SIGNATURE_TTL_MS) {
+      return fail("Signature expired - try again");
+    }
+    if (!(await this.chain.verify(address, signedMessage.create(p.stateId, p.timestamp), p.signature))) {
+      return fail(BAD_SIGNATURE);
+    }
 
     const active = this.activeBattleFor(p.stateId);
     if (active?.phase === "lobby" && active.creator.address === address) return { ok: true, battleId: active.id };
@@ -116,13 +127,14 @@ export class BattleManager {
     return { ok: true, battle: this.view(battle) };
   }
 
-  async join(p: { battleId: string; address: string; name: string }): Promise<Ack> {
+  async join(p: JoinBattlePayload): Promise<Ack> {
     const battle = this.battles.get(p.battleId);
     if (!battle) return fail("Battle not found");
     if (battle.phase !== "lobby") return fail("Battle already started");
     if (!isAddress(p.address)) return fail("Invalid address");
     const address = p.address.toLowerCase();
     if (address === battle.creator.address) return fail("You can't battle yourself");
+    if (!(await this.chain.verify(address, signedMessage.join(battle.id), p.signature))) return fail(BAD_SIGNATURE);
     if (battle.requiredOpponent && battle.requiredOpponent !== address) {
       return fail("Only the current ruler of this state can accept this challenge");
     }
@@ -148,7 +160,7 @@ export class BattleManager {
     return { ok: true };
   }
 
-  pick(p: { battleId: string; address: string; side: Side; leverage: number }): Ack {
+  async pick(p: PickPayload): Promise<Ack> {
     const battle = this.battles.get(p.battleId);
     if (!battle) return fail("Battle not found");
     if (battle.phase !== "picking") return fail("Picks are closed");
@@ -158,6 +170,10 @@ export class BattleManager {
     if (!Number.isInteger(p.leverage) || p.leverage < 1 || p.leverage > ARENA_MAX_LEVERAGE) {
       return fail(`Leverage must be 1-${ARENA_MAX_LEVERAGE}x`);
     }
+    if (!(await this.chain.verify(address, signedMessage.pick(battle.id, p.side, p.leverage), p.signature))) {
+      return fail(BAD_SIGNATURE);
+    }
+    if (battle.phase !== "picking") return fail("Picks are closed");
 
     battle.picks[address] = { side: p.side, leverage: p.leverage };
     if (Object.values(battle.picks).every(Boolean)) {

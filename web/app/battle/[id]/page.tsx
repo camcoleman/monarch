@@ -3,22 +3,27 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useSignMessage } from "wagmi";
 import {
   ARENA_MAX_LEVERAGE,
   BATTLE_COLLATERAL,
-  GOLD_PER_WIN,
   STATES,
   TROPHIES_PER_WIN,
+  goldPerWin,
+  signedMessage,
   type BattleTick,
   type BattleView,
   type PlayerRef,
   type Side,
 } from "@monarch/shared";
+import { Celebration } from "@/components/Celebration";
 import { LineChart, type ChartPoint } from "@/components/LineChart";
 import { RegisterCard } from "@/components/RegisterCard";
-import { useMe } from "@/hooks/useMonarch";
+import { GoldCoin } from "@/components/village/GoldCoin";
+import { useBuildings, useMe } from "@/hooks/useMonarch";
 import { useNow } from "@/hooks/useNow";
 import { MONARCH_ADDRESS, explorerTx } from "@/lib/config";
+import { friendlyError } from "@/lib/errors";
 import { countdown, pct, shortAddr, usd } from "@/lib/format";
 import { getSocket } from "@/lib/socket";
 
@@ -121,6 +126,7 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
   const [link, setLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [joining, setJoining] = useState(false);
+  const { signMessageAsync } = useSignMessage();
   const [error, setError] = useState<string | null>(null);
   useEffect(() => setLink(window.location.href), []);
 
@@ -132,12 +138,20 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
     setJoining(true);
     setError(null);
     try {
+      let signature: string;
+      try {
+        signature = await signMessageAsync({ message: signedMessage.join(battle.id) });
+      } catch (err) {
+        setError(friendlyError(err));
+        return;
+      }
       const res = await getSocket()
         .timeout(10_000)
         .emitWithAck("battle:join", {
           battleId: battle.id,
           address: me.address,
           name: me.player?.name ?? shortAddr(me.address),
+          signature,
         });
       if (!res.ok) setError(res.error);
     } catch {
@@ -200,19 +214,31 @@ function PickPanel({ battle, isPlayer, now }: { battle: BattleView; isPlayer: bo
   const [side, setSide] = useState<Side>("long");
   const [leverage, setLeverage] = useState(3);
   const [error, setError] = useState<string | null>(null);
+  const [signing, setSigning] = useState(false);
+  const { signMessageAsync } = useSignMessage();
   const locked = me.address ? battle.picked[me.address] : false;
   const players = [battle.creator, battle.opponent!];
 
   const lockIn = async () => {
     if (!me.address) return;
     setError(null);
+    setSigning(true);
     try {
+      let signature: string;
+      try {
+        signature = await signMessageAsync({ message: signedMessage.pick(battle.id, side, leverage) });
+      } catch (err) {
+        setError(friendlyError(err));
+        return;
+      }
       const res = await getSocket()
         .timeout(10_000)
-        .emitWithAck("battle:pick", { battleId: battle.id, address: me.address, side, leverage });
+        .emitWithAck("battle:pick", { battleId: battle.id, address: me.address, side, leverage, signature });
       if (!res.ok) setError(res.error);
     } catch {
       setError("Referee server did not respond");
+    } finally {
+      setSigning(false);
     }
   };
 
@@ -261,8 +287,8 @@ function PickPanel({ battle, isPlayer, now }: { battle: BattleView; isPlayer: bo
               className="w-full accent-[#f5b301]"
             />
           </label>
-          <button className="btn-gold w-full text-lg" onClick={lockIn}>
-            Lock in {side} {leverage}x
+          <button className="btn-gold w-full text-lg" disabled={signing} onClick={lockIn}>
+            {signing ? "Sign in your wallet..." : `Lock in ${side} ${leverage}x`}
           </button>
           <p className="text-center text-xs text-zinc-500">No pick by the deadline defaults to long 1x.</p>
         </>
@@ -329,17 +355,17 @@ function CenterBar({ battle, now, myAddr }: { battle: BattleView; now: number; m
             ? "You're losing"
             : "Dead even";
   return (
-    <div className="flex items-center justify-between rounded-2xl border border-gold/30 bg-gold/5 px-6 py-3">
+    <div className="grid grid-cols-2 items-center gap-2 rounded-2xl border border-gold/30 bg-gold/5 px-4 py-3 sm:flex sm:justify-between sm:px-6">
       <div className="text-sm text-zinc-400">
         Entry <span className="font-mono text-zinc-200">{battle.entryPrice ? usd(battle.entryPrice) : "-"}</span>
       </div>
-      <div className="text-center">
+      <div className="order-first col-span-2 text-center sm:order-none">
         <p className="font-mono text-4xl font-bold text-gold">
           {battle.phase === "live" ? countdown((battle.endsAt ?? now) - now) : "00:00"}
         </p>
         <p className="text-sm font-semibold">{status}</p>
       </div>
-      <div className="text-sm text-zinc-400">
+      <div className="text-right text-sm text-zinc-400">
         BTC <span className="font-mono text-zinc-200">{battle.lastPrice ? usd(battle.lastPrice) : "-"}</span>
       </div>
     </div>
@@ -350,18 +376,30 @@ function Result({ battle, myAddr }: { battle: BattleView; myAddr: string | null 
   const state = STATES[battle.stateId];
   const winner = battle.winner === battle.creator.address ? battle.creator : battle.opponent!;
   const won = myAddr === battle.winner;
+  const defended = battle.defender === battle.winner;
+  const { levels } = useBuildings(winner.address);
+  const gold = goldPerWin(levels?.[1] ?? 1);
   return (
     <div className="panel space-y-3 p-6 text-center">
-      <p className={`font-display text-5xl font-bold ${!myAddr || won ? "text-gold" : "text-down"}`}>
+      {(won || !myAddr) && <Celebration count={won ? 48 : 24} />}
+      <p className={`pop-in font-display text-5xl font-bold ${!myAddr || won ? "text-gold" : "text-down"}`}>
         {!myAddr ? `${winner.name} wins` : won ? "VICTORY" : "DEFEAT"}
       </p>
       <p className="text-zinc-300">
-        {winner.name} conquers <b>{state.name}</b>.
+        {winner.name} {defended ? "defends" : "conquers"} <b>{state.name}</b>.
       </p>
       <div className="flex justify-center gap-6 text-lg">
-        <span>🏆 +{TROPHIES_PER_WIN}</span>
-        <span>🪙 +{GOLD_PER_WIN}</span>
-        <span>🏰 +1</span>
+        <span className="pop-in" style={{ animationDelay: "0.2s" }}>
+          🏆 +{TROPHIES_PER_WIN}
+        </span>
+        <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.35s" }}>
+          <GoldCoin size={20} /> +{gold}
+        </span>
+        {!defended && (
+          <span className="pop-in" style={{ animationDelay: "0.5s" }}>
+            🏰 +1
+          </span>
+        )}
       </div>
       <p className="text-sm">
         {battle.txHash ? (
@@ -369,9 +407,11 @@ function Result({ battle, myAddr }: { battle: BattleView; myAddr: string | null 
             Recorded on Monad Testnet - view transaction
           </a>
         ) : battle.settleError ? (
-          <span className="text-red-400">Settlement failed: {battle.settleError}</span>
+          <span className="text-red-400">
+            Couldn&apos;t record this result on-chain ({battle.settleError}). The referee wallet may be out of MON.
+          </span>
         ) : (
-          <span className="text-zinc-400">Recording on Monad Testnet...</span>
+          <span className="animate-pulse text-zinc-400">Recording on Monad Testnet...</span>
         )}
       </p>
       <Link href="/map" className="btn-gold">

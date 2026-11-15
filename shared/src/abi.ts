@@ -13,7 +13,59 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "BUILDING_COUNT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "GOLD_PER_WIN",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MAX_LEVEL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MINE_BONUS_PER_LEVEL",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "STARTING_GOLD",
     "inputs": [],
     "outputs": [
       {
@@ -46,6 +98,44 @@ export const monarchAbi = [
         "name": "",
         "type": "uint32",
         "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "baseCost",
+    "inputs": [
+      {
+        "name": "building",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "getBuildings",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8[4]",
+        "internalType": "uint8[4]"
       }
     ],
     "stateMutability": "view"
@@ -114,6 +204,25 @@ export const monarchAbi = [
         "name": "owners",
         "type": "address[8]",
         "internalType": "address[8]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "goldPerWin",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -315,6 +424,19 @@ export const monarchAbi = [
     "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "upgrade",
+    "inputs": [
+      {
+        "name": "building",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "event",
     "name": "BattleSettled",
     "inputs": [
@@ -390,6 +512,37 @@ export const monarchAbi = [
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "Upgraded",
+    "inputs": [
+      {
+        "name": "player",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "building",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "uint8"
+      },
+      {
+        "name": "level",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "cost",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "AlreadyRegistered",
     "inputs": []
@@ -397,6 +550,11 @@ export const monarchAbi = [
   {
     "type": "error",
     "name": "AlreadySettled",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidBuilding",
     "inputs": []
   },
   {
@@ -412,6 +570,16 @@ export const monarchAbi = [
   {
     "type": "error",
     "name": "InvalidState",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "MaxLevelReached",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotEnoughGold",
     "inputs": []
   },
   {
@@ -432,6 +600,11 @@ export const monarchAbi = [
   {
     "type": "error",
     "name": "OwnerNotInBattle",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "TownHallTooLow",
     "inputs": []
   }
 ] as const;

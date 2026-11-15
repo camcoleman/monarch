@@ -3,12 +3,14 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { STATES } from "@monarch/shared";
+import { useSignMessage } from "wagmi";
+import { STATES, signedMessage } from "@monarch/shared";
 import { RegisterCard } from "@/components/RegisterCard";
 import { USMap } from "@/components/USMap";
 import { useMe, usePlayers, useStateOwners } from "@/hooks/useMonarch";
 import { useOpenBattles } from "@/hooks/useOpenBattles";
 import { MONARCH_ADDRESS } from "@/lib/config";
+import { friendlyError } from "@/lib/errors";
 import { ownerColor, shortAddr } from "@/lib/format";
 import { getSocket } from "@/lib/socket";
 
@@ -20,6 +22,7 @@ export default function MapPage() {
   const openBattles = useOpenBattles();
   const [selected, setSelected] = useState<number | null>(0);
   const [creating, setCreating] = useState(false);
+  const { signMessageAsync } = useSignMessage();
   const [error, setError] = useState<string | null>(null);
 
   const besieged = useMemo(() => new Set(openBattles.map((b) => b.stateId)), [openBattles]);
@@ -37,12 +40,22 @@ export default function MapPage() {
     setCreating(true);
     setError(null);
     try {
+      const timestamp = Date.now();
+      let signature: string;
+      try {
+        signature = await signMessageAsync({ message: signedMessage.create(selected, timestamp) });
+      } catch (err) {
+        setError(friendlyError(err));
+        return;
+      }
       const res = await getSocket()
         .timeout(10_000)
         .emitWithAck("battle:create", {
           stateId: selected,
           address: me.address,
           name: me.player?.name ?? shortAddr(me.address),
+          timestamp,
+          signature,
         });
       if (res.ok) router.push(`/battle/${res.battleId}`);
       else setError(res.error);

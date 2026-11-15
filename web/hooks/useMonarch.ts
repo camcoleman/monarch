@@ -32,6 +32,18 @@ export function usePlayer(address?: string) {
   return { player, isLoading: query.isLoading, refetch: query.refetch };
 }
 
+/** Building levels indexed by building ID (Town Hall, Gold Mine, Barracks, Trophy Hall). */
+export function useBuildings(address?: string) {
+  const query = useReadContract({
+    ...base,
+    functionName: "getBuildings",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: { enabled: Boolean(MONARCH_ADDRESS && address), refetchInterval: 10_000 },
+  });
+  const levels = useMemo(() => (query.data ? [...query.data] : null), [query.data]);
+  return { levels, refetch: query.refetch };
+}
+
 export function useMe() {
   const { address, isConnected } = useAccount();
   const { player, isLoading, refetch } = usePlayer(address);

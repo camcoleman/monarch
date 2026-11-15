@@ -3,11 +3,13 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { GoldCoin } from "@/components/village/GoldCoin";
 import { useMe } from "@/hooks/useMonarch";
 import { usd } from "@/lib/format";
 import { useLatestPrice } from "@/lib/priceStore";
 
 const LINKS = [
+  { href: "/", label: "Village" },
   { href: "/trade", label: "Trade" },
   { href: "/map", label: "Conquest" },
   { href: "/leaderboard", label: "Leaderboard" },
@@ -20,17 +22,19 @@ export function Nav() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-edge bg-ink/80 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
         <Link href="/" className="font-display text-xl font-bold tracking-[0.2em] text-gold">
           MONARCH
         </Link>
-        <nav className="flex gap-1 text-sm">
+        <nav className="order-last -mx-1 flex w-full gap-1 overflow-x-auto text-sm sm:order-none sm:mx-0 sm:w-auto">
           {LINKS.map((l) => (
             <Link
               key={l.href}
               href={l.href}
               className={`rounded-lg px-3 py-1.5 transition ${
-                pathname.startsWith(l.href) ? "bg-edge text-gold" : "text-zinc-400 hover:text-zinc-100"
+                (l.href === "/" ? pathname === "/" : pathname.startsWith(l.href))
+                  ? "bg-edge text-gold"
+                  : "text-zinc-400 hover:text-zinc-100"
               }`}
             >
               {l.label}
@@ -44,11 +48,17 @@ export function Nav() {
           {player && (
             <span className="hidden gap-3 md:flex">
               <span title="Trophies">🏆 {player.trophies}</span>
-              <span title="Gold">🪙 {player.gold}</span>
+              <span title="Gold" className="inline-flex items-center gap-1">
+                <GoldCoin size={16} /> {player.gold}
+              </span>
               <span title="States">🏰 {player.statesOwned}</span>
             </span>
           )}
-          <ConnectButton chainStatus="icon" showBalance={false} accountStatus="address" />
+          <ConnectButton
+            chainStatus="icon"
+            showBalance={false}
+            accountStatus={{ smallScreen: "avatar", largeScreen: "address" }}
+          />
         </div>
       </div>
     </header>

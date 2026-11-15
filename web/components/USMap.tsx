@@ -2,7 +2,7 @@
 
 import { geoPath } from "d3-geo";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { feature } from "topojson-client";
 import type { GeometryCollection, Topology } from "topojson-specification";
 import us from "us-atlas/states-albers-10m.json";
@@ -26,6 +26,21 @@ interface Props {
 
 export function USMap({ owners, selected, besieged, onSelect }: Props) {
   const [hovered, setHovered] = useState<number | null>(null);
+  const [flashing, setFlashing] = useState<Set<number>>(new Set());
+  const prevOwners = useRef<(string | null)[] | null>(null);
+
+  const ownersKey = owners.join(",");
+  useEffect(() => {
+    const prev = prevOwners.current;
+    prevOwners.current = owners;
+    if (!prev || prev.length === 0 || owners.length === 0) return;
+    const changed = owners.map((o, i) => (o !== prev[i] ? i : -1)).filter((i) => i >= 0);
+    if (changed.length === 0) return;
+    setFlashing(new Set(changed));
+    const t = setTimeout(() => setFlashing(new Set()), 2600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownersKey]);
 
   const labels = useMemo(
     () =>
@@ -56,7 +71,9 @@ export function USMap({ owners, selected, besieged, onSelect }: Props) {
             fillOpacity={active ? (isHovered || isSelected ? 1 : 0.85) : 1}
             stroke={isSelected ? "#f5b301" : active ? "#0b0a12" : "#24212f"}
             strokeWidth={isSelected ? 3 : 1}
-            className={active ? "cursor-pointer transition-[fill-opacity]" : ""}
+            className={
+              active ? `cursor-pointer transition-[fill-opacity] ${flashing.has(stateId) ? "state-flash" : ""}` : ""
+            }
             onMouseEnter={() => active && setHovered(stateId)}
             onMouseLeave={() => setHovered(null)}
             onClick={() => active && onSelect(stateId)}

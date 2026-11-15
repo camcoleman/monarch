@@ -38,6 +38,87 @@ body {
   @apply btn border border-edge text-zinc-200 hover:border-gold/60 hover:text-gold;
 }
 
+@utility village-btn {
+  @apply rounded-2xl border-2 border-black/50 px-2.5 py-1 text-sm font-black text-white sm:px-4 sm:py-2 sm:text-base shadow-[0_4px_0_rgb(0_0_0/0.45)] transition [text-shadow:0_2px_0_rgb(0_0_0/0.5)] hover:brightness-110 active:translate-y-0.5 active:shadow-[0_2px_0_rgb(0_0_0/0.45)];
+}
+
+.village-sprite {
+  transform: translate(-50%, -100%);
+}
+
+.village-flag {
+  transform-origin: left center;
+  animation: flag-wave 1.6s ease-in-out infinite;
+}
+
+.village-coin {
+  animation: coin-float 2.2s ease-in-out infinite;
+}
+
+.confetti-piece {
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+  animation-fill-mode: both;
+}
+
+@keyframes confetti-fall {
+  from {
+    transform: translate(0, -10vh) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--drift), 105vh) rotate(540deg);
+    opacity: 0.8;
+  }
+}
+
+.state-flash {
+  animation: state-flash 0.6s ease-in-out 4;
+}
+
+@keyframes state-flash {
+  50% {
+    fill-opacity: 0.25;
+    stroke: #f5b301;
+    stroke-width: 4px;
+  }
+}
+
+.pop-in {
+  animation: pop-in 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+}
+
+@keyframes flag-wave {
+  0%,
+  100% {
+    transform: skewY(0deg) scaleX(1);
+  }
+  50% {
+    transform: skewY(-6deg) scaleX(0.92);
+  }
+}
+
+@keyframes coin-float {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-28px);
+    opacity: 0;
+  }
+}
+
 @utility input {
   @apply rounded-xl border border-edge bg-ink px-3 py-2 outline-none focus:border-gold/70;
 }

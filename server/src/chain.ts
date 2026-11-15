@@ -74,6 +74,21 @@ export class Chain {
     return exists ? name : null;
   }
 
+  /** True if `signature` is `player`'s signature of `message`. Always true when running without a chain. */
+  async verify(player: string, message: string, signature: string): Promise<boolean> {
+    if (!this.publicClient) return true;
+    if (!/^0x[0-9a-fA-F]+$/.test(signature)) return false;
+    try {
+      return await this.publicClient.verifyMessage({
+        address: getAddress(player),
+        message,
+        signature: signature as Hex,
+      });
+    } catch {
+      return false;
+    }
+  }
+
   /** Serialized so concurrent battles never race on the referee nonce. Retries once. */
   settle(args: SettleArgs): Promise<Hex> {
     const run = () =>

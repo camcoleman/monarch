@@ -2,12 +2,17 @@
 pragma solidity ^0.8.24;
 
 /// @title MONARCH - trade to conquer territory on Monad
-/// @notice Records players, battle settlements, rewards, and US state ownership.
+/// @notice Records players, battle settlements, rewards, village buildings, and US state ownership.
 ///         Battles are refereed off-chain; only the referee can settle them.
 contract Monarch {
     uint8 public constant STATE_COUNT = 8; // 0 CA, 1 OR, 2 WA, 3 TX, 4 FL, 5 NY, 6 CO, 7 IL
     uint32 public constant TROPHIES_PER_WIN = 25;
     uint32 public constant GOLD_PER_WIN = 100;
+    uint32 public constant STARTING_GOLD = 200;
+
+    uint8 public constant BUILDING_COUNT = 4; // 0 Town Hall, 1 Gold Mine, 2 Barracks, 3 Trophy Hall
+    uint8 public constant MAX_LEVEL = 5;
+    uint32 public constant MINE_BONUS_PER_LEVEL = 20;
 
     struct Player {
         string name;
@@ -26,6 +31,7 @@ contract Monarch {
     address[] public playerList;
     mapping(uint8 => address) public stateOwner;
     mapping(bytes32 => bool) public settled;
+    mapping(address => uint8[BUILDING_COUNT]) internal buildings;
 
     event Registered(address indexed player, string name);
     event BattleSettled(
@@ -36,6 +42,7 @@ contract Monarch {
         int32 winnerBps,
         int32 loserBps
     );
+    event Upgraded(address indexed player, uint8 indexed building, uint8 level, uint32 cost);
     event RefereeChanged(address referee);
 
     error NotOwner();
@@ -47,6 +54,10 @@ contract Monarch {
     error AlreadySettled();
     error InvalidPlayers();
     error OwnerNotInBattle();
+    error InvalidBuilding();
+    error MaxLevelReached();
+    error TownHallTooLow();
+    error NotEnoughGold();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -73,10 +84,32 @@ contract Monarch {
         uint256 len = bytes(name).length;
         if (len == 0 || len > 24) revert InvalidName();
 
-        players[msg.sender].name = name;
-        players[msg.sender].exists = true;
+        Player storage p = players[msg.sender];
+        p.name = name;
+        p.gold = STARTING_GOLD;
+        p.exists = true;
+        buildings[msg.sender] = [1, 1, 1, 1];
         playerList.push(msg.sender);
         emit Registered(msg.sender, name);
+    }
+
+    /// @notice Spend gold to raise a building one level. Other buildings can't exceed the Town Hall.
+    function upgrade(uint8 building) external {
+        Player storage p = players[msg.sender];
+        if (!p.exists) revert NotRegistered();
+        if (building >= BUILDING_COUNT) revert InvalidBuilding();
+
+        uint8[BUILDING_COUNT] storage levels = buildings[msg.sender];
+        uint8 next = levels[building] + 1;
+        if (next > MAX_LEVEL) revert MaxLevelReached();
+        if (building != 0 && next > levels[0]) revert TownHallTooLow();
+
+        uint32 cost = baseCost(building) * next;
+        if (p.gold < cost) revert NotEnoughGold();
+
+        p.gold -= cost;
+        levels[building] = next;
+        emit Upgraded(msg.sender, building, next, cost);
     }
 
     /// @param winnerBps / loserBps battle returns in basis points (for the record only).
@@ -106,11 +139,29 @@ contract Monarch {
 
         Player storage w = players[winner];
         w.trophies += TROPHIES_PER_WIN;
-        w.gold += GOLD_PER_WIN;
+        w.gold += goldPerWin(winner);
         w.wins += 1;
         players[loser].losses += 1;
 
         emit BattleSettled(battleId, stateId, winner, loser, winnerBps, loserBps);
+    }
+
+    function baseCost(uint8 building) public pure returns (uint32) {
+        if (building == 0) return 100; // Town Hall
+        if (building == 1) return 60; // Gold Mine
+        if (building == 2) return 50; // Barracks
+        if (building == 3) return 80; // Trophy Hall
+        revert InvalidBuilding();
+    }
+
+    /// @notice Gold a win pays this player: base reward plus the Gold Mine bonus.
+    function goldPerWin(address player) public view returns (uint32) {
+        uint8 mine = buildings[player][1];
+        return GOLD_PER_WIN + (mine > 1 ? MINE_BONUS_PER_LEVEL * (mine - 1) : 0);
+    }
+
+    function getBuildings(address player) external view returns (uint8[BUILDING_COUNT] memory) {
+        return buildings[player];
     }
 
     function getStates() external view returns (address[STATE_COUNT] memory owners) {

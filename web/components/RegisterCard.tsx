@@ -6,6 +6,7 @@ import { useChainId, useSwitchChain, useWaitForTransactionReceipt, useWriteContr
 import { FAUCET_URL, monadTestnet, monarchAbi } from "@monarch/shared";
 import { useMe } from "@/hooks/useMonarch";
 import { MONARCH_ADDRESS } from "@/lib/config";
+import { friendlyError } from "@/lib/errors";
 
 /** Walks the user through connect, switch to Monad Testnet, and on-chain registration. */
 export function RegisterCard({ compact = false }: { compact?: boolean }) {
@@ -76,7 +77,7 @@ export function RegisterCard({ compact = false }: { compact?: boolean }) {
           </button>
         </form>
       )}
-      {error && <p className="text-sm text-red-400">{error.message.split("\n")[0]}</p>}
+      {error && <p className="text-sm text-red-400">{friendlyError(error)}</p>}
       <p className="text-xs text-zinc-500">
         Need gas?{" "}
         <a className="text-royal underline" href={FAUCET_URL} target="_blank" rel="noreferrer">
