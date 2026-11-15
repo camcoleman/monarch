@@ -21,7 +21,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Providers>
           <Nav />
           <StatusBanner />
-          <main className="mx-auto max-w-6xl px-4 pb-16 pt-6">{children}</main>
+          <main className="mx-auto max-w-6xl px-4 pb-10 pt-6">{children}</main>
+          <footer className="clash-text pb-6 text-center text-xs">
+            Charts by{" "}
+            <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer" className="underline">
+              TradingView Lightweight Charts
+            </a>
+          </footer>
         </Providers>
       </body>
     </html>

@@ -42,7 +42,8 @@ export function LineChart({ points, color = "#e59b07", height = 280, lines = [],
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, {
       autoSize: true,
-      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#7b5f3c" },
+      // Logo hidden; attribution lives in the site footer (app/layout.tsx).
+      layout: { background: { type: ColorType.Solid, color: "transparent" }, textColor: "#7b5f3c", attributionLogo: false },
       grid: { vertLines: { color: "#e6d1a0" }, horzLines: { color: "#e6d1a0" } },
       rightPriceScale: { borderColor: "#c9ac6c" },
       timeScale: { borderColor: "#c9ac6c", timeVisible: true, secondsVisible: true },
