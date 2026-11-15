@@ -1,36 +1,51 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { MAX_LAND, leagueFor } from "@monarch/shared";
 import { KingdomMap } from "@/components/KingdomMap";
+import { WorldMap } from "@/components/WorldMap";
 import { GoldCoin, LandIcon, LeagueBadge, TrophyIcon } from "@/components/base/ui";
 import { useMe, usePlayers } from "@/hooks/useMonarch";
 import { shortAddr } from "@/lib/format";
 
-type Tab = "trophies" | "territory";
+type Tab = "trophies" | "world" | "kingdoms";
+const isTab = (x: string | null): x is Tab => x === "trophies" || x === "world" || x === "kingdoms";
 
 export default function LeaderboardPage() {
   const { players, isLoading } = usePlayers();
   const { address } = useMe();
-  const [tab, setTab] = useState<Tab>("trophies");
+  const params = useSearchParams();
+  const initial = params.get("tab");
+  const [tab, setTab] = useState<Tab>(isTab(initial) ? initial : "world");
 
   const ranked = useMemo(() => [...players].sort((a, b) => b.trophies - a.trophies || b.wins - a.wins), [players]);
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="clash-text font-display text-4xl">{tab === "trophies" ? "Top Players" : "Kingdom Map"}</h1>
-        <div className="flex gap-2">
-          {(["trophies", "territory"] as const).map((k) => (
+        <h1 className="clash-text font-display text-4xl">
+          {tab === "trophies" ? "Top Players" : tab === "world" ? "World Map" : "Kingdoms"}
+        </h1>
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ["world", "World"],
+              ["trophies", "Trophies"],
+              ["kingdoms", "Kingdoms"],
+            ] as const
+          ).map(([k, label]) => (
             <button key={k} onClick={() => setTab(k)} className={`px-4 py-1.5 text-base ${tab === k ? "btn-blue" : "btn-ghost"}`}>
-              {k === "trophies" ? "Trophies" : "Territory"}
+              {label}
             </button>
           ))}
         </div>
       </div>
 
-      {tab === "territory" ? (
+      {tab === "world" ? (
+        <WorldMap />
+      ) : tab === "kingdoms" ? (
         <KingdomMap players={players} me={address} />
       ) : (
         <>

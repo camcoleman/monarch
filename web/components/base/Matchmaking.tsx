@@ -3,7 +3,7 @@
 import { Bot, Link2, Swords } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { signedMessage } from "@monarch/shared";
+import { REALMS, signedMessage } from "@monarch/shared";
 import { useGameActions } from "@/hooks/useSession";
 import { useSearchingCount } from "@/hooks/useLiveBattles";
 import { friendlyError } from "@/lib/errors";
@@ -14,7 +14,16 @@ import { ClashModal } from "./ui";
 type Status = "idle" | "signing" | "searching" | "error";
 
 /** Attack: queue for a random opponent, practice against the bot, or challenge a specific player / open invite link. */
-export function MatchmakingModal({ onClose, target }: { onClose: () => void; target?: { address: string; name: string } }) {
+export function MatchmakingModal({
+  onClose,
+  target,
+  realm = null,
+}: {
+  onClose: () => void;
+  target?: { address: string; name: string };
+  /** When set, the battle is fought over this shared realm. */
+  realm?: number | null;
+}) {
   const router = useRouter();
   const { sign, me, session } = useGameActions();
   const searchingCount = useSearchingCount();
@@ -90,10 +99,10 @@ export function MatchmakingModal({ onClose, target }: { onClose: () => void; tar
     leaveQueue();
     try {
       const timestamp = Date.now();
-      const signature = await sign(signedMessage.challenge(to, timestamp));
+      const signature = await sign(signedMessage.challenge(to, timestamp, realm));
       const res = await getSocket()
         .timeout(15_000)
-        .emitWithAck("battle:challenge", { address: me.address, target: to, timestamp, signature });
+        .emitWithAck("battle:challenge", { address: me.address, target: to, realm, timestamp, signature });
       if (!res.ok) return fail(res.error);
       router.push(`/battle/${res.battleId}`);
     } catch (err) {
@@ -102,15 +111,41 @@ export function MatchmakingModal({ onClose, target }: { onClose: () => void; tar
   };
 
   const busy = status === "signing";
+  const realmName = realm != null ? REALMS[realm]?.name : null;
+  const title = realmName
+    ? target
+      ? `Battle for ${realmName}`
+      : `Claim ${realmName}`
+    : target
+      ? `Attack ${target.name}`
+      : "Attack!";
 
   return (
-    <ClashModal title={target ? `Attack ${target.name}` : "Attack!"} onClose={onClose}>
+    <ClashModal title={title} onClose={onClose}>
       <div className="flex flex-col items-center gap-4 text-center">
         <SearchScene searching={status === "searching" || busy} />
 
-        {target ? (
+        {target || realmName ? (
           <p>
-            Challenge <b>{target.name}</b> to a trading battle. They get an invite link; the winner takes land, gold and trophies.
+            {realmName ? (
+              <>
+                Fight over <b>{realmName}</b>
+                {target ? (
+                  <>
+                    {" "}
+                    against <b>{target.name}</b>
+                  </>
+                ) : (
+                  <> — send an invite link; the winner conquers the realm</>
+                )}
+                . The winner takes the realm, gold and trophies.
+              </>
+            ) : (
+              <>
+                Challenge <b>{target!.name}</b> to a trading battle. They get an invite link; the winner takes land, gold and
+                trophies.
+              </>
+            )}
           </p>
         ) : status === "searching" ? (
           <div className="space-y-1">
@@ -132,6 +167,10 @@ export function MatchmakingModal({ onClose, target }: { onClose: () => void; tar
             <button className="btn-red text-xl" disabled={busy} onClick={() => challenge(target.address)}>
               <Swords size={22} strokeWidth={3} /> {busy ? "Signing..." : "Send challenge"}
             </button>
+          ) : realmName ? (
+            <button className="btn-gold text-xl" disabled={busy} onClick={() => challenge(null)}>
+              <Link2 size={20} strokeWidth={3} /> {busy ? "Signing..." : "Create invite"}
+            </button>
           ) : (
             <>
               {status !== "searching" && (
@@ -151,7 +190,7 @@ export function MatchmakingModal({ onClose, target }: { onClose: () => void; tar
             {status === "searching" ? "Stop searching" : "Cancel"}
           </button>
         </div>
-        {!target && (
+        {!target && !realmName && (
           <p className="text-xs text-muted">
             Practice battles are free and off-chain: no rewards, no wallet pop-ups.
             {!session.active && " Turn on Fast Mode to skip pop-ups in real battles too."}

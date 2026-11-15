@@ -117,6 +117,32 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "NO_REALM",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "REALM_COUNT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "STARTING_GOLD",
     "inputs": [],
     "outputs": [
@@ -314,6 +340,11 @@ export const monarchAbi = [
             "name": "loot",
             "type": "uint32",
             "internalType": "uint32"
+          },
+          {
+            "name": "realm",
+            "type": "uint8",
+            "internalType": "uint8"
           }
         ]
       }
@@ -382,6 +413,19 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "getRealms",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "owners",
+        "type": "address[16]",
+        "internalType": "address[16]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getRecentBattles",
     "inputs": [
       {
@@ -425,6 +469,11 @@ export const monarchAbi = [
             "name": "loot",
             "type": "uint32",
             "internalType": "uint32"
+          },
+          {
+            "name": "realm",
+            "type": "uint8",
+            "internalType": "uint8"
           }
         ]
       }
@@ -595,6 +644,25 @@ export const monarchAbi = [
   },
   {
     "type": "function",
+    "name": "realmOwner",
+    "inputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "referee",
     "inputs": [],
     "outputs": [
@@ -684,6 +752,11 @@ export const monarchAbi = [
         "name": "loserBps",
         "type": "int32",
         "internalType": "int32"
+      },
+      {
+        "name": "realm",
+        "type": "uint8",
+        "internalType": "uint8"
       }
     ],
     "outputs": [],
@@ -797,6 +870,12 @@ export const monarchAbi = [
         "type": "uint32",
         "indexed": false,
         "internalType": "uint32"
+      },
+      {
+        "name": "realm",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
       }
     ],
     "anonymous": false
@@ -959,6 +1038,11 @@ export const monarchAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidRealm",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidSession",
     "inputs": []
   },
@@ -985,6 +1069,11 @@ export const monarchAbi = [
   {
     "type": "error",
     "name": "NotRegistered",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "OwnerNotInBattle",
     "inputs": []
   },
   {

@@ -12,6 +12,7 @@ import {
   LOOT_PCT,
   ROUND_SECONDS,
   goldPerWin,
+  realmInfo,
   signedMessage,
   trophiesPerWin,
   type AssetId,
@@ -110,12 +111,19 @@ export default function BattlePage() {
   const bottom: PlayerRef = isOpponent ? battle.opponent! : battle.creator;
   const top: PlayerRef | null = isOpponent ? battle.creator : battle.opponent;
   const practice = battle.mode === "practice";
+  const realm = battle.realm != null ? realmInfo(battle.realm) : null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
       <div className="text-center">
         <p className="clash-text font-display text-base text-[#ffd84a]">
-          {practice ? "Practice battle · no rewards" : battle.mode === "match" ? "Matchmade battle" : "Challenge"}
+          {practice
+            ? "Practice battle · no rewards"
+            : realm
+              ? `Battle for ${realm.name}`
+              : battle.mode === "match"
+                ? "Matchmade battle"
+                : "Challenge"}
         </p>
         <h1 className="clash-text font-display text-3xl sm:text-5xl">
           {battle.creator.name} <span className="text-[#ff7552]">vs</span> {battle.opponent?.name ?? "???"}
@@ -637,10 +645,13 @@ function RealRewards({ battle, winner, loser }: { battle: BattleView; winner: Pl
     );
   }
 
+  const realm = battle.realm != null ? realmInfo(battle.realm) : null;
   return (
     <>
       <p>
-        {winner.name} raids {loser.name} and claims new territory.
+        {realm
+          ? `${winner.name} conquers ${realm.name}${loser ? ` from ${loser.name}` : ""}.`
+          : `${winner.name} raids ${loser.name} and claims new territory.`}
       </p>
       <div className="flex flex-wrap justify-center gap-6 font-display text-2xl">
         <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.2s" }}>
@@ -651,7 +662,7 @@ function RealRewards({ battle, winner, loser }: { battle: BattleView; winner: Pl
           <span className="text-base text-[#b07800]">{loot !== null ? ` +${loot} loot` : ` +${LOOT_PCT}% loot`}</span>
         </span>
         <span className="pop-in inline-flex items-center gap-1" style={{ animationDelay: "0.5s" }}>
-          <LandIcon size={26} /> +1
+          <LandIcon size={26} /> {realm ? realm.name : "+1"}
         </span>
       </div>
       <div className="text-sm">

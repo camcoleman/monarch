@@ -6,9 +6,12 @@ import {
   ASSET_IDS,
   BOT_PLAYER,
   DEFAULT_ASSET,
+  NO_REALM,
+  REALMS,
   SIGNATURE_TTL_MS,
   computeReturnPct,
   isAsset,
+  isRealm,
   signedMessage,
   unlockedAssets,
   type Ack,
@@ -64,6 +67,8 @@ interface Battle {
   winner: string | null;
   txHash: string | null;
   settleError: string | null;
+  /** Realm fought over, or null for matchmade / practice battles. */
+  realm: number | null;
   timer?: NodeJS.Timeout;
   botTimer?: NodeJS.Timeout;
 }
@@ -136,9 +141,30 @@ export class BattleManager {
 
   /** Opens a lobby that `target` (or anyone, if null) can accept via the invite link. */
   async challenge(p: ChallengePayload): Promise<Ack<{ battleId: string }>> {
-    const auth = await this.authenticate(p.address, signedMessage.challenge(p.target, p.timestamp), p.signature, p.timestamp);
+    const realm = p.realm == null ? null : p.realm;
+    const auth = await this.authenticate(
+      p.address,
+      signedMessage.challenge(p.target, p.timestamp, realm),
+      p.signature,
+      p.timestamp
+    );
     if ("error" in auth) return fail(auth.error);
     const me = auth.player;
+
+    if (realm !== null && !isRealm(realm)) return fail("Unknown realm");
+    if (realm !== null) {
+      const siege = [...this.battles.values()].find((b) => b.realm === realm && b.phase !== "ended");
+      if (siege) return fail(`${REALMS[realm].name} is already under siege`);
+      const owner = await this.chain.getRealmOwner(realm);
+      if (owner && owner === me.address && !p.target) {
+        // Claiming your own realm with an open invite is fine; attacking yourself is not.
+      } else if (owner && owner !== me.address) {
+        // Owned realms can only be taken by challenging the owner.
+        if (!p.target || p.target.toLowerCase() !== owner) {
+          return fail(`${REALMS[realm].name} belongs to someone else - challenge its owner`);
+        }
+      }
+    }
 
     let target: string | null = null;
     if (p.target) {
@@ -149,18 +175,22 @@ export class BattleManager {
     }
 
     const current = this.activeBattleOf(me.address);
-    if (current?.phase === "lobby" && current.requiredOpponent === target) return { ok: true, battleId: current.id };
+    if (current?.phase === "lobby" && current.requiredOpponent === target && current.realm === realm) {
+      return { ok: true, battleId: current.id };
+    }
     if (current) return fail("Finish your current battle first");
     this.queue.delete(me.address);
 
-    const battle = this.newBattle("challenge", me, target);
+    const battle = this.newBattle("challenge", me, target, realm);
     battle.timer = setTimeout(() => {
       if (battle.phase !== "lobby") return;
       this.battles.delete(battle.id);
       console.log(`[battle ${battle.id}] lobby expired`);
       this.broadcastLive();
     }, LOBBY_TTL_MS);
-    console.log(`[battle ${battle.id}] challenge by ${me.name}${target ? ` to ${target}` : ""}`);
+    console.log(
+      `[battle ${battle.id}] challenge by ${me.name}${target ? ` to ${target}` : ""}${realm !== null ? ` for ${REALMS[realm].name}` : ""}`
+    );
     this.broadcastLive();
     return { ok: true, battleId: battle.id };
   }
@@ -212,6 +242,13 @@ export class BattleManager {
     if (battle.phase !== "lobby") return fail("Battle already started");
     const other = this.activeBattleOf(address);
     if (other && other !== battle) return fail("Finish your current battle first");
+
+    if (battle.realm !== null) {
+      const owner = await this.chain.getRealmOwner(battle.realm);
+      if (owner && owner !== battle.creator.address && owner !== address) {
+        return fail(`${REALMS[battle.realm].name} belongs to someone else`);
+      }
+    }
 
     clearTimeout(battle.timer);
     this.queue.delete(address);
@@ -301,7 +338,12 @@ export class BattleManager {
     return { player: playerRef(address, name) };
   }
 
-  private newBattle(mode: Battle["mode"], creator: PlayerRef, requiredOpponent: string | null): Battle {
+  private newBattle(
+    mode: Battle["mode"],
+    creator: PlayerRef,
+    requiredOpponent: string | null,
+    realm: number | null = null
+  ): Battle {
     const id = randomBytes(5).toString("hex");
     const battle: Battle = {
       id,
@@ -323,6 +365,7 @@ export class BattleManager {
       winner: null,
       txHash: null,
       settleError: null,
+      realm,
     };
     this.battles.set(id, battle);
     return battle;
@@ -437,6 +480,7 @@ export class BattleManager {
         loser,
         winnerBps: Math.round((battle.returns[winner] ?? 0) * 100),
         loserBps: Math.round((battle.returns[loser] ?? 0) * 100),
+        realm: battle.realm ?? NO_REALM,
       })
       .then((hash) => {
         battle.txHash = hash;
@@ -499,6 +543,7 @@ export class BattleManager {
       winner: b.winner,
       txHash: b.txHash,
       settleError: b.settleError,
+      realm: b.realm,
     };
   }
 

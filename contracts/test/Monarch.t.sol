@@ -29,7 +29,7 @@ contract MonarchTest is Test {
 
     function _win(address winner, address loser) internal {
         vm.prank(referee);
-        monarch.settleBattle(keccak256(abi.encode(nonce++)), winner, loser, 150, -150);
+        monarch.settleBattle(keccak256(abi.encode(nonce++)), winner, loser, 150, -150, 255);
     }
 
     function test_RegisterGrantsStartingBase() public view {
@@ -59,6 +59,49 @@ contract MonarchTest is Test {
         assertEq(a.land, 4);
     }
 
+    function _fight(address winner, address loser, uint8 realm) internal {
+        vm.prank(referee);
+        monarch.settleBattle(keccak256(abi.encode(nonce++)), winner, loser, 150, -150, realm);
+    }
+
+    function test_CaptureNeutralRealm() public {
+        _fight(alice, bob, 3);
+        assertEq(monarch.realmOwner(3), alice);
+        assertEq(_p(alice).land, 5);
+        assertEq(_p(bob).land, 4);
+        assertEq(monarch.getRealms()[3], alice);
+        assertEq(monarch.getHistory(alice, 1)[0].realm, 3);
+    }
+
+    function test_TakeRealmFromOwner() public {
+        _fight(alice, bob, 3);
+        _fight(bob, carol, 4);
+        _fight(bob, alice, 3);
+        assertEq(monarch.realmOwner(3), bob);
+        assertEq(_p(bob).land, 6);
+        assertEq(_p(alice).land, 4);
+    }
+
+    function test_DefendingRealmKeepsLand() public {
+        _fight(alice, bob, 3);
+        _fight(alice, bob, 3);
+        assertEq(monarch.realmOwner(3), alice);
+        assertEq(_p(alice).land, 5);
+    }
+
+    function test_OutsiderCannotTakeOwnedRealm() public {
+        _fight(alice, bob, 3);
+        vm.prank(referee);
+        vm.expectRevert(Monarch.OwnerNotInBattle.selector);
+        monarch.settleBattle(keccak256("z"), bob, carol, 1, -1, 3);
+    }
+
+    function test_InvalidRealmReverts() public {
+        vm.prank(referee);
+        vm.expectRevert(Monarch.InvalidRealm.selector);
+        monarch.settleBattle(keccak256("z"), bob, carol, 1, -1, 16);
+    }
+
     function test_LandCapsAtMax() public {
         for (uint256 i = 0; i < 30; i++) _win(alice, bob);
         assertEq(_p(alice).land, 25);
@@ -66,23 +109,23 @@ contract MonarchTest is Test {
 
     function test_SettleOnlyReferee() public {
         vm.expectRevert(Monarch.NotReferee.selector);
-        monarch.settleBattle(keccak256("x"), alice, bob, 1, -1);
+        monarch.settleBattle(keccak256("x"), alice, bob, 1, -1, 255);
     }
 
     function test_SettleTwiceReverts() public {
         vm.startPrank(referee);
-        monarch.settleBattle(keccak256("x"), alice, bob, 1, -1);
+        monarch.settleBattle(keccak256("x"), alice, bob, 1, -1, 255);
         vm.expectRevert(Monarch.AlreadySettled.selector);
-        monarch.settleBattle(keccak256("x"), alice, bob, 1, -1);
+        monarch.settleBattle(keccak256("x"), alice, bob, 1, -1, 255);
         vm.stopPrank();
     }
 
     function test_SettleRejectsUnregisteredAndSelf() public {
         vm.startPrank(referee);
         vm.expectRevert(Monarch.NotRegistered.selector);
-        monarch.settleBattle(keccak256("x"), alice, address(0xDEAD), 1, -1);
+        monarch.settleBattle(keccak256("x"), alice, address(0xDEAD), 1, -1, 255);
         vm.expectRevert(Monarch.InvalidPlayers.selector);
-        monarch.settleBattle(keccak256("y"), alice, alice, 1, -1);
+        monarch.settleBattle(keccak256("y"), alice, alice, 1, -1, 255);
         vm.stopPrank();
     }
 

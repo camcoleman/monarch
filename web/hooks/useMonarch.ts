@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useAccount, useBalance, useReadContract } from "wagmi";
-import { extractorCap, extractorRate, monadTestnet, monarchAbi } from "@monarch/shared";
+import { REALM_COUNT, extractorCap, extractorRate, monadTestnet, monarchAbi } from "@monarch/shared";
 import { MONARCH_ADDRESS } from "@/lib/config";
 
 export interface PlayerData {
@@ -24,6 +24,8 @@ export interface BattleRecord {
   loserBps: number;
   timestamp: number;
   loot: number;
+  /** Realm fought over, or 255 (NO_REALM) for matchmade battles. */
+  realm: number;
 }
 
 const base = { address: MONARCH_ADDRESS, abi: monarchAbi, chainId: monadTestnet.id } as const;
@@ -80,7 +82,9 @@ export function useMonBalance(address?: string) {
   return { value: q.data ? Number(q.data.value) / 1e18 : null, refetch: q.refetch };
 }
 
-function toRecords(data: readonly { winner: string; loser: string; winnerBps: number; loserBps: number; timestamp: bigint; loot: number }[] | undefined) {
+function toRecords(
+  data: readonly { winner: string; loser: string; winnerBps: number; loserBps: number; timestamp: bigint; loot: number; realm: number }[] | undefined
+) {
   return (data ?? []).map<BattleRecord>((r) => ({
     winner: r.winner.toLowerCase(),
     loser: r.loser.toLowerCase(),
@@ -88,7 +92,36 @@ function toRecords(data: readonly { winner: string; loser: string; winnerBps: nu
     loserBps: r.loserBps,
     timestamp: Number(r.timestamp),
     loot: r.loot,
+    realm: r.realm,
   }));
+}
+
+/** Owners of the 16 shared realms; null means neutral. */
+export function useRealms() {
+  const query = useReadContract({
+    ...base,
+    functionName: "getRealms",
+    query: { enabled, refetchInterval: 8_000 },
+  });
+  const owners = useMemo(() => {
+    const out: (string | null)[] = Array.from({ length: REALM_COUNT }, () => null);
+    if (!query.data) return out;
+    for (let i = 0; i < REALM_COUNT; i++) {
+      const a = query.data[i];
+      out[i] = a && a !== "0x0000000000000000000000000000000000000000" ? a.toLowerCase() : null;
+    }
+    return out;
+  }, [query.data]);
+  return { owners, isLoading: query.isLoading, refetch: query.refetch };
+}
+
+export function useBattleCount() {
+  const query = useReadContract({
+    ...base,
+    functionName: "battleCount",
+    query: { enabled, refetchInterval: 10_000 },
+  });
+  return { count: query.data !== undefined ? Number(query.data) : null, refetch: query.refetch };
 }
 
 export function useHistory(address?: string, limit = 25) {

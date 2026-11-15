@@ -1,7 +1,7 @@
 "use client";
 
 import { useAccountModal } from "@rainbow-me/rainbowkit";
-import { ChartCandlestick, Home, Plus, ScrollText, ShoppingCart, Swords, Trophy, Wallet } from "lucide-react";
+import { ChartCandlestick, Globe2, Home, Plus, ScrollText, ShoppingCart, Swords, Trophy, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { FAUCET_URL, MAX_LAND, leagueFor, upgradeCost } from "@monarch/shared";
@@ -180,7 +180,10 @@ export function Base({ player, readOnly = false }: { player: PlayerData; readOnl
         {/* Bottom right: shop and menu */}
         <div className="pointer-events-auto absolute bottom-4 right-4 flex items-end gap-2 sm:bottom-6 sm:right-6 sm:gap-3">
           <div className="flex flex-col gap-2 sm:gap-3">
-            <RoundButton label="Ranks" size="sm" href="/leaderboard">
+            <RoundButton label="World" size="sm" href="/leaderboard">
+              <Globe2 size={24} strokeWidth={2.5} />
+            </RoundButton>
+            <RoundButton label="Ranks" size="sm" href="/leaderboard?tab=trophies">
               <Trophy size={24} strokeWidth={2.5} />
             </RoundButton>
             {readOnly ? (

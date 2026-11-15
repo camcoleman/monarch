@@ -4,8 +4,7 @@
 
 **Play it live:** **https://monarch-five-tau.vercel.app** (connect a browser wallet like MetaMask or Rabby on Monad Testnet; get test MON from the faucet linked on the landing page)
 
-**Monad Testnet contract:** [`0x6F13287544819FfB03638247C7950d0487fE7898`](https://testnet.monadscan.com/address/0x6F13287544819FfB03638247C7950d0487fE7898)
-**Monad Testnet contract:** [`0x6DD4f21c830929f04C6b9c40e2a4ad9818e27f22`](https://testnet.monadscan.com/address/0x6DD4f21c830929f04C6b9c40e2a4ad9818e27f22)
+**Monad Testnet contract:** [`0xb4198200cA1A184E8e36CcF8748eC975e37feC73`](https://testnet.monadscan.com/address/0xb4198200cA1A184E8e36CcF8748eC975e37feC73)
 
 ## Layout
 
@@ -82,10 +81,11 @@ Leaving `CONTRACT_ADDRESS` empty runs the server with no chain: battles still wo
 ## Game rules
 
 - Paper trading: $10,000 virtual balance (stored in the browser), long/short up to 10x on any coin your Town Hall has unlocked (guests get BTC), liquidation at -100% of margin.
-- Matchmaking: **Attack** queues you; the next commander to hit Attack is paired with you. You can also send an open invite link, or attack a specific player from their scouted village (`/kingdom/<address>`). Unaccepted invites expire after 5 minutes.
+- Matchmaking: **Attack** queues you; the next commander to hit Attack is paired with you. You can also send an open invite link, attack a specific player from their scouted village (`/kingdom/<address>`), or fight over a shared realm from the **World Map**. Unaccepted invites expire after 5 minutes.
 - Battles: both players get the same entry price, each pick a coin, long/short and leverage within 20 seconds (whatever is selected locks in automatically near the deadline; no pick at all defaults to long BTC 1x), then the 30-second round runs on live prices. Each player's return is measured on their own coin, so a SOL long can face a DOGE short. Highest return wins; ties go to the player who accepted.
-- Winner: +25 trophies (more with a Trophy Hall), +100 gold (more with a Gold Mine), 10% of the loser's gold as loot, and +1 territory plot (max 25).
-- Loser: -10 trophies and -1 territory plot (never below the starting 4).
+- Winner: +25 trophies (more with a Trophy Hall), +100 gold (more with a Gold Mine), 10% of the loser's gold as loot. Realm battles transfer that realm's ownership on-chain; matchmade battles still give +1 / −1 personal land (max 25, never below 4).
+- Loser: -10 trophies (and -1 land / the realm if they held it).
+- Shared World Map: 16 realms (`REALMS` in `shared`). An owned realm can only change hands in a battle that includes its current owner.
 - Leagues by trophies: Bronze 0, Silver 100, Gold 250, Crystal 500, Titan 1000, Monarch 2000.
 
 - Practice: **Attack -> Practice vs Bot**, or **Try a demo battle** on the landing page (no wallet needed), starts an off-chain round against the Training Bot. Every coin and up to 6x leverage are available, the bot picks a random trade, and nothing is settled or rewarded.
@@ -111,12 +111,14 @@ Finding a match, issuing a challenge, accepting, and locking in a pick each requ
 
 ## Demo script
 
-1. Two browsers, two wallets. Register both; each lands on their village. (For a solo demo, hit **Try a demo battle** instead.)
-2. Turn on Fast mode in one browser to show pop-up free play. Collect gold from the Gold Mine and upgrade the Town Hall to unlock ETH.
-3. Hit **Attack** in both browsers - matchmaking pairs them.
-4. Both pick a coin, side and leverage (the Barracks caps it), and watch the 30-second round on live prices.
-5. Open the settlement transaction from the result screen.
-6. Back in the village: a new territory plot lights up, the battle log shows the raid and loot, the rankings update.
+1. Connect a wallet and register (or hit **Try a demo battle** for a solo practice round with live charts).
+2. Play a practice battle to show the live price charts, entry line and return badge.
+3. Open the **World Map** (Ranks → World, or the World button in the village).
+4. Claim a neutral realm (invite link) or challenge Diego for an owned one.
+5. Win, show "You conquered [Realm]", the MonadScan tx, and the realm changing colour on the map.
+6. Turn on Fast mode: one approval, then no wallet pop-ups for battles and upgrades.
+
+**Vercel / live demo:** set `NEXT_PUBLIC_MONARCH_ADDRESS=0xb4198200cA1A184E8e36CcF8748eC975e37feC73` and `NEXT_PUBLIC_SERVER_URL` to a game server whose `/health` returns `"settle": true` (needs `CONTRACT_ADDRESS` + `REFEREE_PRIVATE_KEY`). Everyone must re-register after this contract redeploy.
 
 ## Known MVP limits
 

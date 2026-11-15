@@ -33,6 +33,32 @@ export const LOOT_PCT = 10;
 export const STARTING_LAND = 4;
 export const MAX_LAND = 25;
 
+/** Shared world map: 16 conquerable realms on a 4x4 isometric grid. Pass NO_REALM for matchmade battles. */
+export const REALM_COUNT = 16;
+export const NO_REALM = 255;
+export const REALMS = [
+  { id: 0, name: "Frostpeak", i: 0, j: 0 },
+  { id: 1, name: "Ironwood", i: 1, j: 0 },
+  { id: 2, name: "Sunvale", i: 2, j: 0 },
+  { id: 3, name: "Stormcliff", i: 3, j: 0 },
+  { id: 4, name: "Mistmarsh", i: 0, j: 1 },
+  { id: 5, name: "Goldmere", i: 1, j: 1 },
+  { id: 6, name: "Ravenhold", i: 2, j: 1 },
+  { id: 7, name: "Emberfall", i: 3, j: 1 },
+  { id: 8, name: "Thornvale", i: 0, j: 2 },
+  { id: 9, name: "Crystalmere", i: 1, j: 2 },
+  { id: 10, name: "Dragonspire", i: 2, j: 2 },
+  { id: 11, name: "Seabreak", i: 3, j: 2 },
+  { id: 12, name: "Ashenfield", i: 0, j: 3 },
+  { id: 13, name: "Moonridge", i: 1, j: 3 },
+  { id: 14, name: "Copperfold", i: 2, j: 3 },
+  { id: 15, name: "Kingsreach", i: 3, j: 3 },
+] as const;
+export type RealmInfo = (typeof REALMS)[number];
+export const realmInfo = (id: number) => REALMS.find((r) => r.id === id);
+export const isRealm = (x: unknown): x is number =>
+  typeof x === "number" && Number.isInteger(x) && x >= 0 && x < REALM_COUNT;
+
 export const MAX_BUILDING_LEVEL = 5;
 export const EXTRACTOR_BONUS_PER_LEVEL = 20;
 export const VAULT_BONUS_PER_LEVEL = 5;
@@ -196,6 +222,8 @@ export interface BattleView {
   winner: string | null;
   txHash: string | null;
   settleError: string | null;
+  /** Realm fought over, or null for matchmade / practice battles. */
+  realm: number | null;
 }
 
 /** Compact battle info for the live feed. */
@@ -229,8 +257,8 @@ export const SIGNATURE_TTL_MS = 5 * 60_000;
  */
 export const signedMessage = {
   findMatch: (timestamp: number) => `MONARCH: find a match\nat:${timestamp}`,
-  challenge: (target: string | null, timestamp: number) =>
-    `MONARCH: issue a challenge\nto:${target ? target.toLowerCase() : "anyone"}\nat:${timestamp}`,
+  challenge: (target: string | null, timestamp: number, realm: number | null = null) =>
+    `MONARCH: issue a challenge\nto:${target ? target.toLowerCase() : "anyone"}\nrealm:${realm ?? "none"}\nat:${timestamp}`,
   join: (battleId: string) => `MONARCH: accept battle\nbattle:${battleId}`,
   pick: (battleId: string, asset: AssetId, side: Side, leverage: number) =>
     `MONARCH: lock in ${side} ${asset} ${leverage}x\nbattle:${battleId}`,
@@ -248,6 +276,8 @@ export interface FindMatchPayload extends Signed {
 export interface ChallengePayload extends Signed {
   /** Opponent address, or null for an open invite link. */
   target: string | null;
+  /** Realm to fight over, or null / omitted for a regular challenge. */
+  realm?: number | null;
   timestamp: number;
 }
 

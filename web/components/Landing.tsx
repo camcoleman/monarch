@@ -7,8 +7,9 @@ import { useState } from "react";
 import { ASSETS, ROUND_SECONDS } from "@monarch/shared";
 import { RegisterCard } from "@/components/RegisterCard";
 import { AssetCoin } from "@/components/base/ui";
-import { useMe } from "@/hooks/useMonarch";
+import { useBattleCount, useMe, useRecentBattles } from "@/hooks/useMonarch";
 import { friendlyError } from "@/lib/errors";
+import { shortAddr } from "@/lib/format";
 import { startPractice } from "@/lib/practice";
 
 const FEATURES = [
@@ -25,7 +26,7 @@ const FEATURES = [
   {
     img: "/village/castle.png",
     title: "Conquer",
-    body: "Victories claim new territory, loot 10% of your rival's gold, and push you up the leagues.",
+    body: "Win a battle for a shared realm on the World Map. Ownership is recorded on Monad Testnet.",
   },
 ];
 
@@ -33,14 +34,16 @@ const STEPS = [
   "Connect a wallet on Monad Testnet and build your village.",
   "Collect gold from your Gold Mine and upgrade your buildings.",
   "Each Town Hall level unlocks a new coin: BTC, then ETH, SOL, DOGE and MON.",
-  "Hit Attack - matchmaking finds you an opponent.",
+  "Open the World Map and claim a neutral realm, or attack an owned one.",
   "Pick a coin, long or short, and leverage (your Barracks sets the max).",
-  `Survive ${ROUND_SECONDS} seconds of live prices. Winners take land, gold and trophies on Monad.`,
+  `Survive ${ROUND_SECONDS} seconds of live prices. Winners conquer the realm on Monad.`,
 ];
 
 export function Landing() {
   const router = useRouter();
   const me = useMe();
+  const { count } = useBattleCount();
+  const { records } = useRecentBattles(1);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +82,24 @@ export function Landing() {
           </div>
           <p className="clash-text font-display text-sm">The demo battle is free: no wallet needed, you vs the Training Bot on live prices.</p>
           {error && <p className="panel inline-block px-3 py-1 text-sm font-bold text-down">{error}</p>}
+          {(count !== null || records[0]) && (
+            <p className="clash-text font-display text-sm text-[#ffe9b0]">
+              {count !== null && (
+                <>
+                  <span className="text-[#ffd84a]">{count}</span> battle{count === 1 ? "" : "s"} recorded on Monad
+                </>
+              )}
+              {records[0] && (
+                <>
+                  {count !== null && " · "}
+                  Latest: {shortAddr(records[0].winner)} beat {shortAddr(records[0].loser)}{" "}
+                  <Link href="/leaderboard" className="underline">
+                    World Map
+                  </Link>
+                </>
+              )}
+            </p>
+          )}
           <div className="flex items-center gap-2">
             {ASSETS.map((a) => (
               <AssetCoin key={a.id} asset={a.id} size={38} />

@@ -9,7 +9,7 @@ import {
   type WalletClient,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { ARENA_MAX_LEVERAGE, MAX_BUILDING_LEVEL, monadTestnet, monarchAbi } from "@monarch/shared";
+import { ARENA_MAX_LEVERAGE, MAX_BUILDING_LEVEL, NO_REALM, monadTestnet, monarchAbi } from "@monarch/shared";
 import type { Config } from "./config";
 
 export interface SettleArgs {
@@ -18,6 +18,8 @@ export interface SettleArgs {
   loser: string;
   winnerBps: number;
   loserBps: number;
+  /** Realm fought over, or NO_REALM for matchmade battles. */
+  realm: number;
 }
 
 /** Reads game state from Monarch.sol and submits referee settlements one at a time. */
@@ -65,6 +67,18 @@ export class Chain {
       args: [getAddress(player)],
     });
     return levels[0];
+  }
+
+  /** Current owner of a realm, or null if neutral / unavailable. */
+  async getRealmOwner(realm: number): Promise<string | null> {
+    if (!this.publicClient || !this.address) return null;
+    const owner = await this.publicClient.readContract({
+      address: this.address,
+      abi: monarchAbi,
+      functionName: "realmOwner",
+      args: [realm],
+    });
+    return owner === "0x0000000000000000000000000000000000000000" ? null : owner.toLowerCase();
   }
 
   /** Battle leverage cap from the player's Barracks. */
@@ -134,7 +148,7 @@ export class Chain {
       address: this.address,
       abi: monarchAbi,
       functionName: "settleBattle",
-      args: [a.onchainId, getAddress(a.winner), getAddress(a.loser), a.winnerBps, a.loserBps],
+      args: [a.onchainId, getAddress(a.winner), getAddress(a.loser), a.winnerBps, a.loserBps, a.realm ?? NO_REALM],
       account: this.account,
       chain: monadTestnet,
     });

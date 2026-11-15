@@ -14,6 +14,10 @@ contract Monarch {
     uint16 public constant STARTING_LAND = 4;
     uint16 public constant MAX_LAND = 25;
 
+    /// @notice Shared world map: realms anyone can conquer. Battles for no realm pass NO_REALM.
+    uint8 public constant REALM_COUNT = 16;
+    uint8 public constant NO_REALM = 255;
+
     uint8 public constant BUILDING_COUNT = 4; // 0 Command Center, 1 Gold Extractor, 2 Mech Bay, 3 Trophy Vault
     uint8 public constant MAX_LEVEL = 5;
     uint32 public constant EXTRACTOR_BONUS_PER_LEVEL = 20; // extra gold per win
@@ -39,6 +43,7 @@ contract Monarch {
         address loser;
         int32 loserBps;
         uint32 loot;
+        uint8 realm;
     }
 
     struct Session {
@@ -53,6 +58,7 @@ contract Monarch {
     address[] public playerList;
     mapping(bytes32 => bool) public settled;
     mapping(address => uint8[BUILDING_COUNT]) internal buildings;
+    mapping(uint8 => address) public realmOwner;
 
     BattleRecord[] internal battleLog;
     mapping(address => uint32[]) internal playerBattles;
@@ -68,7 +74,8 @@ contract Monarch {
         address indexed loser,
         int32 winnerBps,
         int32 loserBps,
-        uint32 loot
+        uint32 loot,
+        uint8 realm
     );
     event Upgraded(address indexed player, uint8 indexed building, uint8 level, uint32 cost);
     event Collected(address indexed player, uint32 amount);
@@ -89,6 +96,8 @@ contract Monarch {
     error NotEnoughGold();
     error InvalidSession();
     error TransferFailed();
+    error InvalidRealm();
+    error OwnerNotInBattle();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert NotOwner();
@@ -242,7 +251,8 @@ contract Monarch {
     // ---------------------------------------------------------------- battles
 
     /// @param winnerBps / loserBps battle returns in basis points (for the record only).
-    function settleBattle(bytes32 battleId, address winner, address loser, int32 winnerBps, int32 loserBps)
+    /// @param realm the realm fought over, or NO_REALM. An owned realm can only change hands in a battle with its owner.
+    function settleBattle(bytes32 battleId, address winner, address loser, int32 winnerBps, int32 loserBps, uint8 realm)
         external
         onlyReferee
     {
@@ -251,6 +261,9 @@ contract Monarch {
         Player storage w = players[winner];
         Player storage l = players[loser];
         if (!w.exists || !l.exists) revert NotRegistered();
+        if (realm != NO_REALM && realm >= REALM_COUNT) revert InvalidRealm();
+        address holder = realm == NO_REALM ? address(0) : realmOwner[realm];
+        if (holder != address(0) && holder != winner && holder != loser) revert OwnerNotInBattle();
 
         settled[battleId] = true;
 
@@ -263,15 +276,27 @@ contract Monarch {
         w.wins += 1;
         l.losses += 1;
 
-        if (w.land < MAX_LAND) w.land += 1;
-        if (l.land > STARTING_LAND) l.land -= 1;
+        if (realm == NO_REALM) {
+            if (w.land < MAX_LAND) w.land += 1;
+            if (l.land > STARTING_LAND) l.land -= 1;
+        } else if (holder != winner) {
+            realmOwner[realm] = winner;
+            if (w.land < MAX_LAND) w.land += 1;
+            if (holder == loser && l.land > STARTING_LAND) l.land -= 1;
+        }
 
         uint32 index = uint32(battleLog.length);
-        battleLog.push(BattleRecord(winner, winnerBps, uint64(block.timestamp), loser, loserBps, loot));
+        battleLog.push(BattleRecord(winner, winnerBps, uint64(block.timestamp), loser, loserBps, loot, realm));
         playerBattles[winner].push(index);
         playerBattles[loser].push(index);
 
-        emit BattleSettled(battleId, winner, loser, winnerBps, loserBps, loot);
+        emit BattleSettled(battleId, winner, loser, winnerBps, loserBps, loot, realm);
+    }
+
+    function getRealms() external view returns (address[REALM_COUNT] memory owners) {
+        for (uint8 i = 0; i < REALM_COUNT; i++) {
+            owners[i] = realmOwner[i];
+        }
     }
 
     // ---------------------------------------------------------------- views
