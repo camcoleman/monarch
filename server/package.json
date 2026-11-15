@@ -1,0 +1,24 @@
+{
+  "name": "@monarch/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "simulate": "tsx scripts/simulate-battle.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@monarch/shared": "workspace:*",
+    "dotenv": "^16.4.0",
+    "socket.io": "^4.8.0",
+    "tsx": "^4.19.0",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "socket.io-client": "^4.8.0",
+    "typescript": "^5.6.0"
+  }
+}

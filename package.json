@@ -1,0 +1,13 @@
+{
+  "name": "monarch",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./server --filter ./web dev",
+    "dev:server": "pnpm --filter ./server dev",
+    "dev:web": "pnpm --filter ./web dev",
+    "build:web": "pnpm --filter ./web build",
+    "typecheck": "pnpm -r typecheck",
+    "test:contracts": "cd contracts && forge test",
+    "abi": "node scripts/export-abi.mjs"
+  }
+}
