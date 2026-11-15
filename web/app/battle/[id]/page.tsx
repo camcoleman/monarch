@@ -11,7 +11,6 @@ import {
   DEFAULT_ASSET,
   LOOT_PCT,
   ROUND_SECONDS,
-  assetInfo,
   goldPerWin,
   signedMessage,
   trophiesPerWin,
@@ -123,12 +122,14 @@ export default function BattlePage() {
       {battle.phase === "picking" && <PickPanel battle={battle} myAddr={myAddr} now={now} />}
       {(battle.phase === "live" || battle.phase === "ended") && top && (
         <>
-          <PlayerPanel battle={battle} player={top} series={series} label={myAddr ? "Opponent" : "Challenger"} />
-          <CenterBar battle={battle} now={now} myAddr={myAddr} />
-          <PlayerPanel battle={battle} player={bottom} series={series} label={myAddr ? "You" : "Creator"} />
+          <Scoreboard battle={battle} left={bottom} right={top} now={now} myAddr={myAddr} />
+          {battle.phase === "ended" && <Result battle={battle} myAddr={myAddr} />}
+          <div className="grid gap-4 md:grid-cols-2">
+            <PlayerPanel battle={battle} player={bottom} series={series} label={myAddr ? "You" : "Creator"} />
+            <PlayerPanel battle={battle} player={top} series={series} label={myAddr ? "Opponent" : "Challenger"} />
+          </div>
         </>
       )}
-      {battle.phase === "ended" && <Result battle={battle} myAddr={myAddr} />}
     </div>
   );
 }
@@ -368,27 +369,21 @@ function PlayerPanel({
   const last = pick && battle.lastPrices?.[pick.asset];
   return (
     <div className={`panel p-4 ${isWinner ? "ring-4 ring-[#ffd84a]" : ""}`}>
-      <div className="mb-2 flex items-end justify-between gap-3">
-        <div className="flex items-center gap-3">
-          {pick && <AssetCoin asset={pick.asset} size={44} />}
-          <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {pick && <AssetCoin asset={pick.asset} size={32} />}
+          <div className="min-w-0">
             <p className="text-xs font-extrabold uppercase tracking-wide text-muted">{label}</p>
-            <p className="flex items-center gap-1.5 font-display text-xl">
-              {player.address === BOT_PLAYER.address && <Bot size={18} strokeWidth={3} />}
+            <p className="flex items-center gap-1.5 truncate font-display text-lg">
+              {player.address === BOT_PLAYER.address && <Bot size={16} strokeWidth={3} />}
               {player.name} {isWinner && "👑"}
             </p>
-            {pick && (
-              <p className={`font-display ${pick.side === "long" ? "text-up" : "text-down"}`}>
-                {pick.side === "long" ? "▲ LONG" : "▼ SHORT"} {pick.asset} · {pick.leverage}x
-              </p>
-            )}
           </div>
         </div>
-        <div className="text-right">
-          <p className="font-display text-4xl" style={{ color }}>
-            {pct(ret, 3)}
+        <div className="shrink-0 text-right">
+          <p className="font-mono text-sm font-bold" style={{ color }}>
+            {usd(BATTLE_COLLATERAL * (1 + ret / 100))}
           </p>
-          <p className="font-mono text-sm font-bold text-muted">{usd(BATTLE_COLLATERAL * (1 + ret / 100))}</p>
           {entry && last && (
             <p className="font-mono text-xs text-muted">
               {fmtPrice(entry)} → {fmtPrice(last)}
@@ -396,47 +391,99 @@ function PlayerPanel({
           )}
         </div>
       </div>
-      <LineChart points={series[player.address] ?? []} color={color} height={150} precision={3} />
+      <LineChart points={series[player.address] ?? []} color={color} height={220} precision={3} />
     </div>
   );
 }
 
-function CenterBar({ battle, now, myAddr }: { battle: BattleView; now: number; myAddr: string | null }) {
-  const opponentAddr =
-    myAddr && (myAddr === battle.creator.address ? battle.opponent?.address : battle.creator.address);
-  const mine = myAddr ? battle.returns[myAddr] ?? 0 : 0;
-  const theirs = opponentAddr ? battle.returns[opponentAddr] ?? 0 : 0;
-  const status =
-    battle.phase === "ended"
-      ? "Final"
-      : !myAddr
-        ? "Live"
-        : mine > theirs
-          ? "You're winning!"
-          : mine < theirs
-            ? "You're losing!"
-            : "Dead even";
-  const assets = [...new Set(Object.values(battle.picks ?? {}).map((p) => p.asset))];
+const RETURN_UP = "#7dff5a";
+const RETURN_DOWN = "#ff6b5a";
+
+/** Head-to-head header: left player, timer and status in the middle, right player, and a lead bar underneath. */
+function Scoreboard({
+  battle,
+  left,
+  right,
+  now,
+  myAddr,
+}: {
+  battle: BattleView;
+  left: PlayerRef;
+  right: PlayerRef;
+  now: number;
+  myAddr: string | null;
+}) {
+  const l = battle.returns[left.address] ?? 0;
+  const r = battle.returns[right.address] ?? 0;
+  const ended = battle.phase === "ended";
+  const status = ended
+    ? "Final"
+    : !myAddr
+      ? "Live"
+      : l > r
+        ? "You're winning!"
+        : l < r
+          ? "You're losing!"
+          : "Dead even";
+  // Lead bar: 50% is even; the leader's colour pushes toward the other side.
+  const spread = Math.max(0.02, Math.abs(l) + Math.abs(r));
+  const leftShare = Math.min(95, Math.max(5, 50 + (50 * (l - r)) / spread));
+  const leftColor = myAddr ? "#ffd84a" : "#46aef0";
+
   return (
-    <div className="wood-header flex flex-wrap items-center justify-between gap-2 rounded-2xl border-[3px] border-[#1d1206] px-4 py-3 shadow-[0_4px_0_#1d1206] sm:px-6">
-      <div className="flex flex-wrap gap-3">
-        {assets.map((a) => (
-          <span key={a} className="flex items-center gap-1.5">
-            <AssetCoin asset={a} size={22} />
-            <span className="clash-text font-display text-sm">
-              {battle.lastPrices?.[a] ? fmtPrice(battle.lastPrices[a]!) : "-"}
-            </span>
-          </span>
-        ))}
+    <div className="wood-header rounded-2xl border-[3px] border-[#1d1206] px-4 py-3 shadow-[0_4px_0_#1d1206] sm:px-6">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+        <ScoreSide battle={battle} player={left} label={myAddr ? "You" : battle.creator.name} align="left" />
+        <div className="text-center">
+          <p className="clash-text font-display text-5xl text-[#ffd84a]">
+            {ended ? "00:00" : countdown((battle.endsAt ?? now) - now)}
+          </p>
+          <p className="clash-text font-display text-base">{status}</p>
+        </div>
+        <ScoreSide battle={battle} player={right} label={myAddr ? "Opponent" : right.name} align="right" />
       </div>
-      <div className="text-center">
-        <p className="clash-text font-display text-4xl text-[#ffd84a]">
-          {battle.phase === "live" ? countdown((battle.endsAt ?? now) - now) : "00:00"}
+      <div className="mt-3 flex h-4 overflow-hidden rounded-full border-2 border-[#1d1206] bg-[#ff6b5a]">
+        <div
+          className="h-full transition-[width] duration-500 ease-out"
+          style={{ width: `${leftShare}%`, background: leftColor }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ScoreSide({
+  battle,
+  player,
+  label,
+  align,
+}: {
+  battle: BattleView;
+  player: PlayerRef;
+  label: string;
+  align: "left" | "right";
+}) {
+  const pick = battle.picks?.[player.address];
+  const ret = battle.returns[player.address] ?? 0;
+  const last = pick && battle.lastPrices?.[pick.asset];
+  const right = align === "right";
+  return (
+    <div className={`flex min-w-0 items-center gap-3 ${right ? "flex-row-reverse text-right" : ""}`}>
+      {pick && <AssetCoin asset={pick.asset} size={48} />}
+      <div className="min-w-0">
+        <p className="clash-text truncate font-display text-lg">
+          {label}
+          {battle.winner === player.address && " 👑"}
         </p>
-        <p className="clash-text font-display text-sm">{status}</p>
-      </div>
-      <div className="clash-text hidden font-display text-sm sm:block">
-        {assets.map((a) => assetInfo(a).name).join(" vs ")}
+        {pick && (
+          <p className="clash-text truncate font-display text-sm text-[#ffe9b0]">
+            {pick.side === "long" ? "▲ LONG" : "▼ SHORT"} {pick.asset} {pick.leverage}x
+            {last ? ` · ${fmtPrice(last)}` : ""}
+          </p>
+        )}
+        <p className="clash-text font-display text-4xl" style={{ color: ret >= 0 ? RETURN_UP : RETURN_DOWN }}>
+          {pct(ret, 3)}
+        </p>
       </div>
     </div>
   );
@@ -469,6 +516,7 @@ function Result({ battle, myAddr }: { battle: BattleView; myAddr: string | null 
       >
         {!myAddr ? `${winner.name} wins` : won ? "Victory!" : "Defeat"}
       </p>
+      <FinalReturns battle={battle} winner={winner} loser={loser} myAddr={myAddr} />
       {practice ? (
         <>
           <p>
@@ -487,6 +535,40 @@ function Result({ battle, myAddr }: { battle: BattleView; myAddr: string | null 
       ) : (
         <RealRewards battle={battle} winner={winner} loser={loser} />
       )}
+    </div>
+  );
+}
+
+function FinalReturns({
+  battle,
+  winner,
+  loser,
+  myAddr,
+}: {
+  battle: BattleView;
+  winner: PlayerRef;
+  loser: PlayerRef;
+  myAddr: string | null;
+}) {
+  return (
+    <div className="mx-auto grid max-w-md grid-cols-2 gap-3">
+      {[winner, loser].map((p) => {
+        const ret = battle.returns[p.address] ?? 0;
+        const pick = battle.picks?.[p.address];
+        return (
+          <div key={p.address} className={`well p-3 ${p === winner ? "ring-4 ring-[#ffd84a]" : ""}`}>
+            <p className="truncate text-sm font-extrabold">
+              {p.address === myAddr ? "You" : p.name} {p === winner && "👑"}
+            </p>
+            <p className={`font-display text-3xl ${ret >= 0 ? "text-up" : "text-down"}`}>{pct(ret, 3)}</p>
+            {pick && (
+              <p className="text-xs font-bold text-muted">
+                {pick.side === "long" ? "Long" : "Short"} {pick.asset} {pick.leverage}x
+              </p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
