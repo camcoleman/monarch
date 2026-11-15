@@ -404,7 +404,13 @@ function PlayerPanel({
           )}
         </div>
       </div>
-      <LineChart points={series[player.address] ?? []} color={color} height={220} precision={3} />
+      <LineChart
+        points={series[player.address] ?? []}
+        color={color}
+        height={220}
+        precision={3}
+        lines={[{ price: 0, color: "#5b4220", title: entry ? `Entry ${fmtPrice(entry)}` : "Entry" }]}
+      />
     </div>
   );
 }

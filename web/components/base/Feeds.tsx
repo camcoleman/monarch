@@ -95,7 +95,7 @@ export function LiveFeed() {
         )}
       </button>
       {open && (
-        <div className="fixed inset-0 z-[250]" onClick={() => setOpen(false)}>
+        <div className="pointer-events-auto fixed inset-0 z-[250]" onClick={() => setOpen(false)}>
           <aside
             className="slide-in-left panel absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-hidden rounded-l-none rounded-r-3xl border-l-0"
             onClick={(e) => e.stopPropagation()}
@@ -135,7 +135,6 @@ export function LiveFeed() {
                       </p>
                     )
                   )}
-                  <p className="mt-1 text-right font-display text-xs text-sky">Watch →</p>
                 </Link>
               ))}
               <div>

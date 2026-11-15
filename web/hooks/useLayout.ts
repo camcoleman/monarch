@@ -1,37 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { DEFAULT_LAYOUT, type Cell, type Layout } from "@/components/base/World";
+import { MAX_LAND } from "@monarch/shared";
+import { GRID, type Layout } from "@/components/base/World";
 
 /** Building positions are cosmetic, so they live in this browser rather than on-chain. */
-const key = (address: string) => `monarch:layout:v2:${address.toLowerCase()}`;
-/** Largest top-left cell for the smallest building footprint (3x3) on the 30x30 build grid. */
-const MAX_CELL = 27;
+const key = (address: string) => `monarch:layout:v3:${address.toLowerCase()}`;
+
+const onGrid = (n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) < GRID.size;
 
 function load(address: string): Layout {
   try {
     const raw = JSON.parse(localStorage.getItem(key(address)) ?? "null") as Layout | null;
-    if (!raw || typeof raw !== "object") return DEFAULT_LAYOUT;
-    const out: Layout = { ...DEFAULT_LAYOUT };
-    for (const id of Object.keys(DEFAULT_LAYOUT).map(Number)) {
-      const c = raw[id];
-      const inField = (n: unknown) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= MAX_CELL;
-      if (c && inField(c.ci) && inField(c.cj)) out[id] = { ci: c.ci, cj: c.cj };
+    if (!raw || typeof raw !== "object") return {};
+    const out: Layout = {};
+    for (let p = 0; p < MAX_LAND; p++) {
+      const t = raw[p];
+      if (t && onGrid(t.i) && onGrid(t.j)) out[p] = { i: t.i, j: t.j };
     }
     return out;
   } catch {
-    return DEFAULT_LAYOUT;
+    return {};
   }
 }
 
 export function useLayout(address: string) {
-  const [layout, setLayout] = useState<Layout>(DEFAULT_LAYOUT);
+  const [layout, setLayout] = useState<Layout>({});
   useEffect(() => setLayout(load(address)), [address]);
 
   const move = useCallback(
-    (id: number, cell: Cell) =>
+    (changes: Layout) =>
       setLayout((prev) => {
-        const next = { ...prev, [id]: cell };
+        const next = { ...prev, ...changes };
         localStorage.setItem(key(address), JSON.stringify(next));
         return next;
       }),
@@ -40,7 +40,7 @@ export function useLayout(address: string) {
 
   const reset = useCallback(() => {
     localStorage.removeItem(key(address));
-    setLayout(DEFAULT_LAYOUT);
+    setLayout({});
   }, [address]);
 
   return { layout, move, reset };

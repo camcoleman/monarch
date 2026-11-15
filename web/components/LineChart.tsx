@@ -5,6 +5,7 @@ import {
   ColorType,
   LineStyle,
   createChart,
+  type AutoscaleInfo,
   type IChartApi,
   type IPriceLine,
   type ISeriesApi,
@@ -37,6 +38,8 @@ export function LineChart({ points, color = "#e59b07", height = 280, lines = [],
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<"Area"> | null>(null);
   const priceLinesRef = useRef<IPriceLine[]>([]);
+  const linePricesRef = useRef<number[]>([]);
+  linePricesRef.current = lines.map((l) => l.price);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -53,6 +56,19 @@ export function LineChart({ points, color = "#e59b07", height = 280, lines = [],
     seriesRef.current = chart.addSeries(AreaSeries, {
       lineWidth: 2,
       priceFormat: { type: "price", precision, minMove: 1 / 10 ** precision },
+      // Keep reference lines (e.g. the entry level) on screen even when the data is all above or below them.
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
+        const info = original();
+        const extra = linePricesRef.current;
+        if (!info?.priceRange || extra.length === 0) return info;
+        return {
+          ...info,
+          priceRange: {
+            minValue: Math.min(info.priceRange.minValue, ...extra),
+            maxValue: Math.max(info.priceRange.maxValue, ...extra),
+          },
+        };
+      },
     });
     return () => {
       chart.remove();
@@ -81,7 +97,7 @@ export function LineChart({ points, color = "#e59b07", height = 280, lines = [],
     if (!series) return;
     priceLinesRef.current.forEach((l) => series.removePriceLine(l));
     priceLinesRef.current = lines.map((l) =>
-      series.createPriceLine({ price: l.price, color: l.color, title: l.title, lineStyle: LineStyle.Dashed, lineWidth: 1 })
+      series.createPriceLine({ price: l.price, color: l.color, title: l.title, lineStyle: LineStyle.Dashed, lineWidth: 2 })
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [linesKey]);

@@ -16,7 +16,7 @@ import { AssetTicker, BattleLogModal, FastModeChip, LiveFeed } from "./Feeds";
 import { IncomingChallenges } from "./IncomingChallenges";
 import { MatchmakingModal } from "./Matchmaking";
 import { GoldCoin, HudBar, LandIcon, LeagueBadge, MonGem, RoundButton, TrophyIcon, XpStar } from "./ui";
-import { World } from "./World";
+import { World, isOutpost } from "./World";
 
 type Modal = "info" | "shop" | "log" | "attack" | null;
 type Toast = { kind: "ok" | "error"; text: string; hash?: string } | null;
@@ -145,7 +145,16 @@ export function Base({ player, readOnly = false }: { player: PlayerData; readOnl
         </div>
 
         {/* Bottom center: selected building actions */}
-        {selected !== null && (
+        {selected !== null && isOutpost(selected) && (
+          <div className="pop-in pointer-events-auto absolute bottom-32 left-1/2 w-72 max-w-[80vw] -translate-x-1/2 sm:bottom-6">
+            <div className="panel px-4 py-3 text-center text-sm">
+              <p className="font-display text-lg">Outpost</p>
+              <p>A plot of land you won in battle. Each outpost adds one to your territory on the kingdom map.</p>
+              {!readOnly && <p className="mt-1 text-muted">Drag it to any of your plots. Dropping onto a building swaps them.</p>}
+            </div>
+          </div>
+        )}
+        {selected !== null && !isOutpost(selected) && (
           <div className="absolute bottom-32 left-1/2 -translate-x-1/2 sm:bottom-6">
             {readOnly ? (
               <div className="pointer-events-auto">
@@ -213,7 +222,7 @@ export function Base({ player, readOnly = false }: { player: PlayerData; readOnl
         </div>
       )}
 
-      {modal === "info" && selected !== null && (
+      {modal === "info" && selected !== null && !isOutpost(selected) && (
         <BuildingInfoModal buildingId={selected} levels={levels} onClose={() => setModal(null)} />
       )}
       {modal === "shop" && (
