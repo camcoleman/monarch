@@ -118,5 +118,5 @@ Finding a match, issuing a challenge, accepting, and locking in a pick each requ
 ## Known MVP limits
 
 - The referee is trusted: it decides prices and results, and battle state lives in its memory.
-- Join and pick signatures have no timestamp, so they are only bound to one battle id (which is single-use).
+- Join and pick signatures have no timestamp, so they are only bound to one battle id.
 - Session keys live in browser `localStorage`; clearing it just means re-enabling Fast mode.
