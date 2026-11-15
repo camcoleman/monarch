@@ -10,6 +10,7 @@ import {
   BOT_PLAYER,
   DEFAULT_ASSET,
   LOOT_PCT,
+  ROUND_SECONDS,
   assetInfo,
   goldPerWin,
   signedMessage,
@@ -29,7 +30,7 @@ import { useGameActions } from "@/hooks/useSession";
 import { useNow } from "@/hooks/useNow";
 import { MONARCH_ADDRESS, explorerTx } from "@/lib/config";
 import { friendlyError } from "@/lib/errors";
-import { countdown, pct, price as fmtPrice, usd } from "@/lib/format";
+import { countdown, pct, price as fmtPrice, shortAddr, usd } from "@/lib/format";
 import { startPractice, useGuestId } from "@/lib/practice";
 import { getSocket } from "@/lib/socket";
 
@@ -174,8 +175,9 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
           <p className="font-display text-2xl">Waiting for a challenger...</p>
           <p className="text-sm text-muted">
             {battle.requiredOpponent
-              ? "Send this link to your target - only they can accept."
+              ? "They'll see an Accept button in their village, or you can send them this link."
               : "Share this link with a rival. Anyone with a village can accept."}
+            {" "}The Accept button only shows for the other player&apos;s wallet, not yours.
           </p>
           <div className="flex gap-2">
             <input readOnly value={link} className="input flex-1 font-mono text-xs" />
@@ -193,14 +195,17 @@ function Lobby({ battle, isCreator }: { battle: BattleView; isCreator: boolean }
       ) : (
         <>
           <p className="text-lg">
-            <b>{battle.creator.name}</b> challenges you to a 90-second trading battle.
+            <b>{battle.creator.name}</b> challenges you to a {ROUND_SECONDS}-second trading battle.
           </p>
           <p className="text-sm text-muted">
             Each side gets {usd(BATTLE_COLLATERAL, 0)} of battle collateral, trades any coin their Town Hall has unlocked, with leverage
             up to their Barracks&apos; limit. Highest return wins land, gold and trophies.
           </p>
           {!canAct ? (
-            <RegisterCard compact />
+            <>
+              <p className="font-display text-lg">Connect a wallet with a village to accept.</p>
+              <RegisterCard compact />
+            </>
           ) : notForMe ? (
             <p className="text-sm text-muted">This challenge was sent to another commander.</p>
           ) : (
@@ -508,10 +513,17 @@ function RealRewards({ battle, winner, loser }: { battle: BattleView; winner: Pl
           <LandIcon size={26} /> +1
         </span>
       </div>
-      <p className="text-sm">
+      <div className="text-sm">
         {battle.txHash ? (
-          <a className="font-bold text-sky underline" href={explorerTx(battle.txHash)} target="_blank" rel="noreferrer">
-            Recorded on Monad Testnet - view transaction
+          <a
+            className="well inline-flex items-center gap-2 px-3 py-2 hover:brightness-105"
+            href={explorerTx(battle.txHash)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="font-display text-base text-up">✓ Recorded on Monad Testnet</span>
+            <span className="font-mono text-xs text-muted">{shortAddr(battle.txHash)}</span>
+            <span className="font-bold text-sky underline">View tx ↗</span>
           </a>
         ) : battle.settleError ? (
           <span className="text-down">
@@ -520,7 +532,7 @@ function RealRewards({ battle, winner, loser }: { battle: BattleView; winner: Pl
         ) : (
           <span className="animate-pulse text-muted">Recording on Monad Testnet...</span>
         )}
-      </p>
+      </div>
       <Link href="/" className="btn-green text-lg">
         Return to village
       </Link>

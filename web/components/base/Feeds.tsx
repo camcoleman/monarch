@@ -85,7 +85,7 @@ export function LiveFeed() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="pointer-events-auto absolute left-0 top-1/2 z-[150] flex -translate-y-1/2 flex-col items-center gap-1 rounded-r-2xl border-[3px] border-l-0 border-[#1d1206] bg-[linear-gradient(90deg,#8b5a2b,#b07c45)] px-1.5 py-4 shadow-[0_3px_0_#1d1206]"
+        className="pointer-events-auto absolute left-3 top-1/2 z-[150] flex -translate-y-1/2 flex-col items-center gap-1 rounded-2xl border-[3px] border-[#1d1206] bg-[linear-gradient(90deg,#8b5a2b,#b07c45)] px-2 py-3 shadow-[inset_0_2px_0_rgb(255_255_255/0.3),0_3px_0_#1d1206] transition hover:brightness-110 sm:left-4"
         aria-label="Open live feed"
       >
         <Radio size={18} strokeWidth={3} className="text-white drop-shadow-[0_1px_0_#1d1206]" />

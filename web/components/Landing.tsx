@@ -4,7 +4,7 @@ import { Bot, ChartCandlestick, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ASSETS } from "@monarch/shared";
+import { ASSETS, ROUND_SECONDS } from "@monarch/shared";
 import { RegisterCard } from "@/components/RegisterCard";
 import { AssetCoin } from "@/components/base/ui";
 import { useMe } from "@/hooks/useMonarch";
@@ -20,7 +20,7 @@ const FEATURES = [
   {
     img: "/village/barracks.png",
     title: "Attack",
-    body: "Get matched with a rival for a 90-second trading battle. Pick a coin, go long or short, highest return wins.",
+    body: `Get matched with a rival for a ${ROUND_SECONDS}-second trading battle. Pick a coin, go long or short, highest return wins.`,
   },
   {
     img: "/village/castle.png",
@@ -35,7 +35,7 @@ const STEPS = [
   "Each Town Hall level unlocks a new coin: BTC, then ETH, SOL, DOGE and MON.",
   "Hit Attack - matchmaking finds you an opponent.",
   "Pick a coin, long or short, and leverage (your Barracks sets the max).",
-  "Survive 90 seconds of live prices. Winners take land, gold and trophies on Monad.",
+  `Survive ${ROUND_SECONDS} seconds of live prices. Winners take land, gold and trophies on Monad.`,
 ];
 
 export function Landing() {

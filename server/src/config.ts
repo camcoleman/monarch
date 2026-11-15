@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { ROUND_SECONDS } from "@monarch/shared";
 
 type Hex = `0x${string}`;
 
@@ -14,7 +15,7 @@ export const config = {
   // "*" or a comma-separated list of allowed origins (e.g. prod + preview Vercel URLs)
   corsOrigin: parseOrigins(env("CORS_ORIGIN") ?? "*"),
   priceMode: (env("PRICE_MODE") === "mock" ? "mock" : "live") as "live" | "mock",
-  roundSeconds: Number(env("ROUND_SECONDS") ?? 90),
+  roundSeconds: Number(env("ROUND_SECONDS") ?? ROUND_SECONDS),
   pickSeconds: Number(env("PICK_SECONDS") ?? 15),
   rpcUrl: env("RPC_URL") ?? "https://testnet-rpc.monad.xyz",
   contractAddress: env("CONTRACT_ADDRESS") as Hex | undefined,

@@ -7,11 +7,13 @@ import { useCallback, useEffect, useState } from "react";
 import { FAUCET_URL, MAX_LAND, leagueFor, upgradeCost } from "@monarch/shared";
 import { pendingGold, useBuildings, useMe, useMonBalance, type PlayerData } from "@/hooks/useMonarch";
 import { useNow } from "@/hooks/useNow";
+import { useLayout } from "@/hooks/useLayout";
 import { useGameActions } from "@/hooks/useSession";
 import { explorerTx } from "@/lib/config";
 import { friendlyError } from "@/lib/errors";
 import { BuildingActionBar, BuildingInfoModal, ShopModal } from "./BuildingPanels";
 import { AssetTicker, BattleLogModal, FastModeChip, LiveFeed } from "./Feeds";
+import { IncomingChallenges } from "./IncomingChallenges";
 import { MatchmakingModal } from "./Matchmaking";
 import { GoldCoin, HudBar, LandIcon, LeagueBadge, MonGem, RoundButton, TrophyIcon, XpStar } from "./ui";
 import { World } from "./World";
@@ -32,6 +34,7 @@ export function Base({ player, readOnly = false }: { player: PlayerData; readOnl
   const [floatText, setFloatText] = useState<string | null>(null);
 
   const pending = pendingGold(player, levels[1], now);
+  const { layout, move: moveBuilding } = useLayout(player.address);
 
   useEffect(() => {
     if (!toast) return;
@@ -79,6 +82,8 @@ export function Base({ player, readOnly = false }: { player: PlayerData; readOnl
       <World
         levels={levels}
         land={player.land}
+        layout={layout}
+        onMove={readOnly ? undefined : moveBuilding}
         selected={selected}
         onSelect={setSelected}
         pending={pending}
@@ -126,6 +131,7 @@ export function Base({ player, readOnly = false }: { player: PlayerData; readOnl
         </div>
 
         {!readOnly && <LiveFeed />}
+        {!readOnly && <IncomingChallenges address={player.address} />}
 
         {/* Bottom left: Attack */}
         <div className="pointer-events-auto absolute bottom-4 left-4 sm:bottom-6 sm:left-6">

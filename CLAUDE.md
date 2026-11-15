@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-MONARCH is a Clash of Clans style crypto trading game on Monad Testnet (chain ID 10143): players build a village and win 90-second 1v1 trading battles for gold, trophies and territory. The Town Hall level unlocks tradable coins (`ASSETS` in `shared`). It is a pnpm workspace (`shared`, `server`, `web`) plus a Foundry project (`contracts`). README.md covers deploy steps, local Anvil setup, and game rules.
+MONARCH is a Clash of Clans style crypto trading game on Monad Testnet (chain ID 10143): players build a village and win 30-second 1v1 trading battles for gold, trophies and territory. The Town Hall level unlocks tradable coins (`ASSETS` in `shared`). It is a pnpm workspace (`shared`, `server`, `web`) plus a Foundry project (`contracts`). README.md covers deploy steps, local Anvil setup, and game rules.
 
 ## Commands
 
