@@ -2,6 +2,8 @@
 
 **Trade. Conquer. Rule.** A competitive BTC paper-trading game on Monad Testnet: win 90-second 1v1 trading battles to capture US states.
 
+**Monad Testnet contract:** [`0x6F13287544819FfB03638247C7950d0487fE7898`](https://testnet.monadexplorer.com/address/0x6F13287544819FfB03638247C7950d0487fE7898)
+
 ## Layout
 
 | Folder | What it is |
