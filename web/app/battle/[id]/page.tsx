@@ -33,7 +33,10 @@ import { countdown, pct, price as fmtPrice, shortAddr, usd } from "@/lib/format"
 import { startPractice, useGuestId } from "@/lib/practice";
 import { getSocket } from "@/lib/socket";
 
+/** Price history per coin since the round went live. */
 type Series = Record<string, ChartPoint[]>;
+
+const pricePrecision = (p: number) => (p >= 1000 ? 2 : p >= 1 ? 3 : 5);
 
 export default function BattlePage() {
   const { id } = useParams<{ id: string }>();
@@ -58,11 +61,12 @@ export default function BattlePage() {
     const onState = (b: BattleView) => {
       if (b.id !== id) return;
       setBattle(b);
-      if (b.phase === "live") {
+      if (b.phase === "live" && b.entryPrices) {
+        const entry = b.entryPrices;
         setSeries((s) =>
           Object.keys(s).length
             ? s
-            : Object.fromEntries(Object.entries(b.returns).map(([a, r]) => [a, [{ t: Date.now(), v: r }]]))
+            : Object.fromEntries(Object.entries(entry).map(([asset, p]) => [asset, [{ t: Date.now(), v: p! }]]))
         );
       }
     };
@@ -71,7 +75,7 @@ export default function BattlePage() {
       setBattle((b) => (b ? { ...b, returns: t.returns, lastPrices: { ...b.lastPrices, ...t.prices } } : b));
       setSeries((s) => {
         const next: Series = { ...s };
-        for (const [addr, r] of Object.entries(t.returns)) next[addr] = [...(s[addr] ?? []), { t: t.t, v: r }];
+        for (const [asset, p] of Object.entries(t.prices)) if (p !== undefined) next[asset] = [...(s[asset] ?? []), { t: t.t, v: p }];
         return next;
       });
     };
@@ -404,13 +408,32 @@ function PlayerPanel({
           )}
         </div>
       </div>
-      <LineChart
-        points={series[player.address] ?? []}
-        color={color}
-        height={220}
-        precision={3}
-        lines={[{ price: 0, color: "#5b4220", title: entry ? `Entry ${fmtPrice(entry)}` : "Entry" }]}
-      />
+      {pick && entry && last && (
+        <p className="mb-1 text-xs font-bold text-muted">
+          {pick.side === "long" ? "Long" : "Short"} {pick.leverage}x: {pick.asset} {last >= entry ? "up" : "down"}{" "}
+          {Math.abs(((last - entry) / entry) * 100).toFixed(3)}% × {pick.leverage}
+          {pick.side === "short" ? " (shorts gain when it falls)" : ""} ={" "}
+          <span style={{ color }}>{pct(ret, 3)}</span>
+        </p>
+      )}
+      <div
+        className="relative overflow-hidden rounded-xl border-2 transition-colors duration-300"
+        style={{ backgroundColor: `${color}1f`, borderColor: `${color}66` }}
+      >
+        <span
+          className="pointer-events-none absolute left-2 top-1.5 z-10 rounded-lg px-2 py-0.5 font-display text-2xl text-white shadow-[0_2px_0_rgb(0_0_0/0.25)]"
+          style={{ backgroundColor: color }}
+        >
+          {pct(ret, 3)}
+        </span>
+        <LineChart
+          points={pick ? (series[pick.asset] ?? []) : []}
+          color={color}
+          height={220}
+          precision={entry ? pricePrecision(entry) : 2}
+          lines={entry ? [{ price: entry, color: "#5b4220", title: `Entry ${fmtPrice(entry)}` }] : []}
+        />
+      </div>
     </div>
   );
 }

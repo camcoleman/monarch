@@ -7,12 +7,14 @@ import { GoldCoin } from "./ui";
 /** World coordinates; the ground art is 16:9. */
 export const VIEW_W = 1600;
 export const VIEW_H = 900;
-/** Isometric 5x5 territory grid laid over the central grass field of the ground art. */
-export const GRID = { cx: 808, cy: 428, tw: 212, th: 140, size: 5 };
+/** Isometric 5x5 territory grid in the middle of the grass field of the ground art. */
+export const GRID = { cx: 808, cy: 428, tw: 120, th: 79.25, size: 5 };
 /** Grass checks per tile edge. */
-const CHECKS = 3;
+const CHECKS = 2;
+/** Checkered grass extends this many tiles past the territory on every side, filling the field. */
+const FIELD_MARGIN = 2;
 /** The art is drawn at a steeper angle than the ground grid; flattening it lines the bases up and lowers the buildings. */
-const SQUASH = 0.86;
+const SQUASH = 0.88;
 
 export type Tile = { i: number; j: number };
 /** Tile per piece: building IDs first, then one outpost castle per extra plot of land (piece ID = land index). */
@@ -31,10 +33,10 @@ export const BUILDING_TILES: Tile[] = [
  * height, `aspect` is height / width, and `fill` is the base width as a fraction of the tile width.
  */
 const SPRITE: Record<string, { baseY: number; aspect: number; fill: number }> = {
-  townhall: { baseY: 0.701, aspect: 512 / 430, fill: 0.94 },
-  goldmine: { baseY: 0.669, aspect: 442 / 512, fill: 0.92 },
-  barracks: { baseY: 0.698, aspect: 512 / 444, fill: 0.9 },
-  trophyhall: { baseY: 0.748, aspect: 512 / 424, fill: 0.86 },
+  townhall: { baseY: 0.701, aspect: 512 / 430, fill: 1 },
+  goldmine: { baseY: 0.669, aspect: 442 / 512, fill: 0.9 },
+  barracks: { baseY: 0.698, aspect: 512 / 444, fill: 0.88 },
+  trophyhall: { baseY: 0.748, aspect: 512 / 424, fill: 0.84 },
   castle: { baseY: 0.802, aspect: 512 / 307, fill: 0.62 },
 };
 
@@ -290,8 +292,9 @@ export function World({
 
   const checks = useMemo(() => {
     const out: { u: number; v: number }[] = [];
-    const n = GRID.size * CHECKS;
-    for (let u = 0; u < n; u++) for (let v = 0; v < n; v++) out.push({ u, v });
+    const lo = -FIELD_MARGIN * CHECKS;
+    const hi = (GRID.size + FIELD_MARGIN) * CHECKS;
+    for (let u = lo; u < hi; u++) for (let v = lo; v < hi; v++) out.push({ u, v });
     return out;
   }, []);
 
@@ -326,10 +329,10 @@ export function World({
             </filter>
           </defs>
 
-          {/* Checkered grass, three checks per tile edge, darker where the land isn't claimed yet. */}
+          {/* Checkered grass, darker where the land isn't claimed yet. */}
           {checks.map(({ u, v }) => {
             const owned = claimed.has(`${Math.floor(u / CHECKS)},${Math.floor(v / CHECKS)}`);
-            const light = (u + v) % 2 === 0;
+            const light = (u + v + 2 * FIELD_MARGIN * CHECKS) % 2 === 0;
             return (
               <polygon
                 key={`c-${u}-${v}`}
@@ -431,7 +434,7 @@ export function World({
 
         {nextTile && !readOnly && (
           <span
-            className="clash-text pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-display text-sm sm:text-base"
+            className="clash-text pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-display text-[10px] sm:text-xs"
             style={{ ...pct(tileCenter(nextTile).x, tileCenter(nextTile).y), zIndex: 3000 }}
           >
             WIN TO CLAIM
