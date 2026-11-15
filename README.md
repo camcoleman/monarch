@@ -2,6 +2,8 @@
 
 **Trade. Conquer. Rule.** A futuristic, Clash of Clans style base-builder on Monad Testnet, powered by BTC trading battles: hit Attack, out-trade your opponent over 90 seconds of live BTC, and expand your territory.
 
+**Play it live:** **https://monarch-five-tau.vercel.app** (connect a browser wallet like MetaMask or Rabby on Monad Testnet; get test MON from the faucet linked on the landing page)
+
 **Monad Testnet contract:** [`0x6F13287544819FfB03638247C7950d0487fE7898`](https://testnet.monadexplorer.com/address/0x6F13287544819FfB03638247C7950d0487fE7898)
 
 ## Layout
